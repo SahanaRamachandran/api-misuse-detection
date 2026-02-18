@@ -99,7 +99,8 @@ def extract_features_from_logs(time_window_minutes=1, is_simulation=False, speci
             'repeat_rate': repeat_rate,
             'status_entropy': status_entropy,
             'endpoint': most_common_endpoint,
-            'method': most_common_method
+            'method': most_common_method,
+            'ip_addresses': df['ip_address'].unique().tolist()  # All unique IPs in this window
         }
         
         return features

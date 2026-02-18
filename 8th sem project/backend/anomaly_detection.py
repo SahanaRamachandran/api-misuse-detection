@@ -44,10 +44,13 @@ class AnomalyDetector:
         
         # 1. Latency Spike Detection
         if avg_response > self.BASELINES['normal_response_time_ms'] * self.THRESHOLDS['latency_spike_multiplier']:
+            # Normalize confidence: higher excess = higher confidence (0.5-1.0 range)
+            ratio = avg_response / (self.BASELINES['normal_response_time_ms'] * self.THRESHOLDS['latency_spike_multiplier'])
+            confidence = min(1.0, 0.5 + (ratio - 1.0) * 0.3)  # Scaled confidence
             detections.append({
                 'anomaly_type': AnomalyType.LATENCY_SPIKE.value,
                 'severity': Severity.HIGH.name,
-                'confidence': min(1.0, avg_response / (self.BASELINES['normal_response_time_ms'] * self.THRESHOLDS['latency_spike_multiplier'])),
+                'confidence': confidence,
                 'metric_value': avg_response,
                 'threshold': self.BASELINES['normal_response_time_ms'] * self.THRESHOLDS['latency_spike_multiplier']
             })
@@ -55,10 +58,12 @@ class AnomalyDetector:
         # 2. Error Spike Detection
         if error_rate > self.THRESHOLDS['error_spike_threshold']:
             severity = Severity.CRITICAL if error_rate > 0.40 else Severity.HIGH
+            ratio = error_rate / self.THRESHOLDS['error_spike_threshold']
+            confidence = min(1.0, 0.6 + (ratio - 1.0) * 0.25)  # Scaled confidence
             detections.append({
                 'anomaly_type': AnomalyType.ERROR_SPIKE.value,
                 'severity': severity.name,
-                'confidence': min(1.0, error_rate / self.THRESHOLDS['error_spike_threshold']),
+                'confidence': confidence,
                 'metric_value': error_rate,
                 'threshold': self.THRESHOLDS['error_spike_threshold']
             })
@@ -66,30 +71,36 @@ class AnomalyDetector:
         # 3. Timeout Detection
         max_response = features.get('max_response_time', 0)
         if max_response > self.THRESHOLDS['timeout_threshold_ms']:
+            ratio = max_response / self.THRESHOLDS['timeout_threshold_ms']
+            confidence = min(1.0, 0.55 + (ratio - 1.0) * 0.28)  # Scaled confidence
             detections.append({
                 'anomaly_type': AnomalyType.TIMEOUT.value,
                 'severity': Severity.HIGH.name,
-                'confidence': min(1.0, max_response / self.THRESHOLDS['timeout_threshold_ms']),
+                'confidence': confidence,
                 'metric_value': max_response,
                 'threshold': self.THRESHOLDS['timeout_threshold_ms']
             })
         
         # 4. Traffic Burst Detection
         if req_count > self.BASELINES['normal_req_per_minute'] * self.THRESHOLDS['traffic_burst_multiplier']:
+            ratio = req_count / (self.BASELINES['normal_req_per_minute'] * self.THRESHOLDS['traffic_burst_multiplier'])
+            confidence = min(1.0, 0.45 + (ratio - 1.0) * 0.2)  # Lower confidence for traffic burst
             detections.append({
                 'anomaly_type': AnomalyType.TRAFFIC_BURST.value,
                 'severity': Severity.MEDIUM.name,
-                'confidence': min(1.0, req_count / (self.BASELINES['normal_req_per_minute'] * self.THRESHOLDS['traffic_burst_multiplier'])),
+                'confidence': confidence,
                 'metric_value': req_count,
                 'threshold': self.BASELINES['normal_req_per_minute'] * self.THRESHOLDS['traffic_burst_multiplier']
             })
         
         # 5. Resource Exhaustion Detection
         if payload_mean > self.BASELINES['normal_payload_size'] * self.THRESHOLDS['resource_exhaustion_multiplier']:
+            ratio = payload_mean / (self.BASELINES['normal_payload_size'] * self.THRESHOLDS['resource_exhaustion_multiplier'])
+            confidence = min(1.0, 0.65 + (ratio - 1.0) * 0.25)  # Higher confidence for resource issues
             detections.append({
                 'anomaly_type': AnomalyType.RESOURCE_EXHAUSTION.value,
                 'severity': Severity.CRITICAL.name,
-                'confidence': min(1.0, payload_mean / (self.BASELINES['normal_payload_size'] * self.THRESHOLDS['resource_exhaustion_multiplier'])),
+                'confidence': confidence,
                 'metric_value': payload_mean,
                 'threshold': self.BASELINES['normal_payload_size'] * self.THRESHOLDS['resource_exhaustion_multiplier']
             })
@@ -131,14 +142,25 @@ class AnomalyDetector:
     
     def _calculate_impact_score(self, detection: Dict, features: Dict) -> float:
         """Calculate impact score based on anomaly type and metrics."""
-        severity_scores = {'CRITICAL': 0.95, 'HIGH': 0.75, 'MEDIUM': 0.50, 'LOW': 0.25}
-        base_impact = severity_scores.get(detection['severity'], 0.25)
+        severity_scores = {'CRITICAL': 0.75, 'HIGH': 0.55, 'MEDIUM': 0.35, 'LOW': 0.15}
+        base_impact = severity_scores.get(detection['severity'], 0.15)
         
         # Adjust based on request volume (more requests = higher impact)
         req_count = features.get('req_count', 1)
-        volume_multiplier = min(2.0, 1.0 + (req_count / 100))
+        volume_factor = min(1.3, 1.0 + (req_count / 200))
         
-        return min(1.0, base_impact * volume_multiplier)
+        # Adjust based on error rate severity
+        error_rate = features.get('error_rate', 0)
+        error_factor = 1.0 + min(0.3, error_rate)  # Up to +30% for high errors
+        
+        # Adjust based on response time (slower = higher impact)
+        avg_response = features.get('avg_response_time', 0)
+        response_factor = 1.0 + min(0.2, avg_response / 1000)  # Up to +20% for slow responses
+        
+        # Combine all factors
+        total_impact = base_impact * volume_factor * error_factor * response_factor
+        
+        return min(1.0, total_impact)
 
 
 # Global detector instance

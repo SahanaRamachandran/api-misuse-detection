@@ -1,0 +1,81 @@
+================================================================================
+MODEL COMPARISON EVALUATION REPORT
+================================================================================
+Generated: 2026-02-15 23:49:55
+
+================================================================================
+COMPREHENSIVE RESULTS
+================================================================================
+
+     model        scenario  accuracy  precision  recall       f1  roc_auc  true_negative  false_positive  false_negative  true_positive
+   csic_rf           clean     0.790   0.256637    0.58 0.355828 0.683667            366              84              21             29
+  csic_iso           clean     0.104   0.100402    1.00 0.182482 0.764400              2             448               0             50
+ robust_rf           clean     0.954   0.885714    0.62 0.729412 0.827556            446               4              19             31
+robust_iso           clean     0.922   0.600000    0.66 0.628571 0.849111            428              22              17             33
+   csic_rf           noisy     0.750   0.195122    0.48 0.277457 0.620378            351              99              26             24
+  csic_iso           noisy     0.100   0.100000    1.00 0.181818 0.705511              0             450               0             50
+ robust_rf           noisy     0.940   0.763158    0.58 0.659091 0.908622            441               9              21             29
+robust_iso           noisy     0.880   0.426471    0.58 0.491525 0.815067            411              39              21             29
+   csic_rf gradual_attacks     0.650   0.168142    0.19 0.178404 0.416188            306              94              81             19
+  csic_iso gradual_attacks     0.200   0.200000    1.00 0.333333 0.713675              0             400               0            100
+ robust_rf gradual_attacks     0.988   0.989583    0.95 0.969388 0.999600            399               1               5             95
+robust_iso gradual_attacks     0.962   0.885714    0.93 0.907317 0.989275            388              12               7             93
+   csic_rf     adversarial     0.682   0.260163    0.32 0.286996 0.599787            309              91              68             32
+  csic_iso     adversarial     0.200   0.200000    1.00 0.333333 0.590875              0             400               0            100
+ robust_rf     adversarial     0.804   1.000000    0.02 0.039216 0.636300            400               0              98              2
+robust_iso     adversarial     0.776   0.269231    0.07 0.111111 0.601350            381              19              93              7
+   csic_rf    weak_signals     0.764   0.438356    0.64 0.520325 0.817113            318              82              36             64
+  csic_iso    weak_signals     0.200   0.200000    1.00 0.333333 0.809850              0             400               0            100
+ robust_rf    weak_signals     0.818   0.764706    0.13 0.222222 0.844400            396               4              87             13
+robust_iso    weak_signals     0.808   0.552632    0.21 0.304348 0.778825            383              17              79             21
+
+================================================================================
+PERFORMANCE DEGRADATION ANALYSIS
+================================================================================
+
+     model        scenario  f1_degradation  f1_degradation_pct  roc_degradation  roc_degradation_pct
+   csic_rf           noisy        0.078372           22.025115         0.063289             9.257273
+   csic_rf gradual_attacks        0.177424           49.862393         0.267479            39.124208
+   csic_rf     adversarial        0.068833           19.344364         0.083879            12.269015
+   csic_rf    weak_signals       -0.164497          -46.229324        -0.133446           -19.519137
+  csic_iso           noisy        0.000664            0.363636         0.058889             7.703936
+  csic_iso gradual_attacks       -0.150852          -82.666667         0.050725             6.635924
+  csic_iso     adversarial       -0.150852          -82.666667         0.173525            22.700811
+  csic_iso    weak_signals       -0.150852          -82.666667        -0.045450            -5.945840
+ robust_rf           noisy        0.070321            9.640762        -0.081067            -9.795918
+ robust_rf gradual_attacks       -0.239976          -32.899934        -0.172044           -20.789474
+ robust_rf     adversarial        0.690196           94.623656         0.191256            23.110902
+ robust_rf    weak_signals        0.507190           69.534050        -0.016844            -2.035446
+robust_iso           noisy        0.137046           21.802773         0.034044             4.009422
+robust_iso gradual_attacks       -0.278746          -44.345898        -0.140164           -16.507132
+robust_iso     adversarial        0.517460           82.323232         0.247761            29.178880
+robust_iso    weak_signals        0.324224           51.581028         0.070286             8.277611
+
+================================================================================
+SUMMARY STATISTICS
+================================================================================
+
+
+csic_rf:
+  Average F1 Score:  0.3238 ± 0.1268
+  Average ROC AUC:   0.6274 ± 0.1454
+  Average Precision: 0.2637 ± 0.1054
+  Average Recall:    0.4420 ± 0.1858
+
+csic_iso:
+  Average F1 Score:  0.2729 ± 0.0828
+  Average ROC AUC:   0.7169 ± 0.0820
+  Average Precision: 0.1601 ± 0.0547
+  Average Recall:    1.0000 ± 0.0000
+
+robust_rf:
+  Average F1 Score:  0.5239 ± 0.3824
+  Average ROC AUC:   0.8433 ± 0.1340
+  Average Precision: 0.8806 ± 0.1155
+  Average Recall:    0.4600 ± 0.3816
+
+robust_iso:
+  Average F1 Score:  0.4886 ± 0.3047
+  Average ROC AUC:   0.8067 ± 0.1398
+  Average Precision: 0.5468 ± 0.2287
+  Average Recall:    0.4900 ± 0.3484

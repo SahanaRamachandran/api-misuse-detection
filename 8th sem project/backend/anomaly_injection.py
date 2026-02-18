@@ -26,6 +26,7 @@ class Severity(Enum):
 
 
 # DETERMINISTIC MAPPING: Each endpoint gets exactly ONE anomaly type
+# Includes both live and simulation endpoints
 ENDPOINT_ANOMALY_MAP = {
     '/login': AnomalyType.ERROR_SPIKE,
     '/payment': AnomalyType.LATENCY_SPIKE,
@@ -33,6 +34,12 @@ ENDPOINT_ANOMALY_MAP = {
     '/profile': AnomalyType.TIMEOUT,
     '/signup': AnomalyType.RESOURCE_EXHAUSTION,
     '/logout': AnomalyType.ERROR_SPIKE,
+    # Simulation endpoints (same mapping)
+    '/sim/login': AnomalyType.ERROR_SPIKE,
+    '/sim/payment': AnomalyType.LATENCY_SPIKE,
+    '/sim/search': AnomalyType.TRAFFIC_BURST,
+    '/sim/profile': AnomalyType.TIMEOUT,
+    '/sim/signup': AnomalyType.RESOURCE_EXHAUSTION,
 }
 
 

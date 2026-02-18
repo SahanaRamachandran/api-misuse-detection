@@ -20,6 +20,9 @@ const DashboardEnhanced: React.FC = () => {
   const [simulatedEndpoint, setSimulatedEndpoint] = useState<SimulatedEndpoint>('/sim/login');
   const [simulationActive, setSimulationActive] = useState(false);
   const [simulationStats, setSimulationStats] = useState<any>(null);
+  
+  // ML status
+  const [mlStatus, setMlStatus] = useState<any>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -72,6 +75,25 @@ const DashboardEnhanced: React.FC = () => {
     const interval = setInterval(loadData, 10000);
     return () => clearInterval(interval);
   }, [loadData]);
+  
+  // Load ML status
+  useEffect(() => {
+    const loadMLStatus = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/ml/status');
+        if (response.ok) {
+          const data = await response.json();
+          setMlStatus(data);
+        }
+      } catch (error) {
+        console.error('Error loading ML status:', error);
+      }
+    };
+    
+    loadMLStatus();
+    const interval = setInterval(loadMLStatus, 30000); // Check every 30s
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (wsAnomalies.length > 0) {
@@ -292,6 +314,16 @@ if (loading) {
               {connected ? 'Connected' : 'Disconnected'}
             </span>
           </div>
+          
+          {/* ML Status */}
+          {mlStatus && mlStatus.available && (
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 rounded-full bg-info-500 animate-pulse" />
+              <span className="text-sm text-dark-muted">
+                ML Active
+              </span>
+            </div>
+          )}
           
           {/* Mode Toggle */}
           <div className="flex items-center space-x-2 bg-dark-700 rounded-lg p-1">

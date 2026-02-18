@@ -5,14 +5,16 @@ import DashboardEnhanced from './pages/DashboardEnhanced';
 import ComprehensiveDashboard from './pages/ComprehensiveDashboard';
 import Analytics from './pages/Analytics';
 import AdminPanel from './pages/AdminPanel';
+import MLFeatures from './pages/MLFeatures';
 
 const Navigation: React.FC = () => {
   const location = useLocation();
 
   const navItems = [
-    { path: '/', label: 'Dashboard', icon: '�' },
+    { path: '/', label: 'Dashboard', icon: '🛡️' },
     { path: '/comprehensive', label: 'Analytics & Graphs', icon: '📈' },
     { path: '/analytics', label: 'Endpoint Analytics', icon: '🎯' },
+    { path: '/ml-features', label: 'ML Features', icon: '🤖' },
     { path: '/admin', label: 'Admin Panel', icon: '⚙️' },
   ];
 
@@ -62,6 +64,7 @@ const App: React.FC = () => {
             <Route path="/" element={<DashboardEnhanced />} />
             <Route path="/comprehensive" element={<ComprehensiveDashboard />} />
             <Route path="/analytics" element={<Analytics />} />
+            <Route path="/ml-features" element={<MLFeatures />} />
             <Route path="/admin" element={<AdminPanel />} />
           </Routes>
         </main>

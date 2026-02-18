@@ -1,6 +1,7 @@
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 import time
+from datetime import datetime
 from database import SessionLocal, APILog
 import sys
 
@@ -14,6 +15,10 @@ live_mode_stats = {
     'error_count': 0,
     'response_times': []
 }
+
+# Request interval tracking for adversarial detection
+last_request_times = {}  # {ip_address: datetime}
+request_intervals = {}   # {ip_address: [intervals]}
 
 # ONLY these endpoints count as live traffic
 LIVE_ENDPOINTS = {'/login', '/payment', '/search', '/profile', '/signup', '/logout'}
@@ -47,6 +52,19 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         method = request.method
         status_code = response.status_code
         ip_address = request.client.host if request.client else "unknown"
+        
+        # Track request intervals for adversarial detection
+        request_interval = 0.0
+        current_time = datetime.utcnow()
+        if ip_address in last_request_times:
+            request_interval = (current_time - last_request_times[ip_address]).total_seconds()
+            if ip_address not in request_intervals:
+                request_intervals[ip_address] = []
+            request_intervals[ip_address].append(request_interval)
+            # Keep only last 20 intervals
+            if len(request_intervals[ip_address]) > 20:
+                request_intervals[ip_address].pop(0)
+        last_request_times[ip_address] = current_time
         
         user_id = None
         if hasattr(request.state, "user_id"):
@@ -102,3 +120,18 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 db.close()
         
         return response
+
+
+def get_request_interval(ip_address: str) -> float:
+    """Get average request interval for an IP address (for adversarial detection)."""
+    if ip_address in request_intervals and len(request_intervals[ip_address]) > 0:
+        return sum(request_intervals[ip_address]) / len(request_intervals[ip_address])
+    return 0.0
+
+
+def get_interval_variance(ip_address: str) -> float:
+    """Get variance of request intervals (low variance = bot behavior)."""
+    if ip_address in request_intervals and len(request_intervals[ip_address]) > 5:
+        import numpy as np
+        return float(np.var(request_intervals[ip_address]))
+    return 0.0
