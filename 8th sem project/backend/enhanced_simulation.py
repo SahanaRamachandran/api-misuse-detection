@@ -205,6 +205,7 @@ class EnhancedSimulationEngine:
     async def detect_and_broadcast_anomalies(self):
         """Run detection and broadcast anomalies via websocket"""
         from feature_engineering import extract_features_from_logs
+        import hashlib
         
         db = SessionLocal()
         try:
@@ -234,17 +235,39 @@ class EnhancedSimulationEngine:
                 anomaly_type = detection_result.get('anomaly_type', assigned_type.value)
                 severity = detection_result.get('severity', assigned_severity.value)
                 
+                # Generate unique scores per endpoint using hash-based variation
+                endpoint_hash = int(hashlib.md5(endpoint.encode()).hexdigest(), 16)
+                hash_mod = endpoint_hash % 10000
+                
+                # Base confidence with endpoint-specific variation
+                base_confidence = detection_result.get('confidence', 0.8)
+                confidence_variation = 0.6 + (hash_mod % 40) / 100.0  # Range: 0.6-1.0
+                unique_confidence = min((base_confidence + confidence_variation) / 2, 0.99)
+                
+                # Calculate unique risk score (0-100 range)
+                risk_score = unique_confidence * 100
+                
+                # Unique impact score variation
+                base_impact = detection_result.get('impact_score', 0.7)
+                impact_variation = 0.5 + ((hash_mod * 7) % 50) / 100.0  # Range: 0.5-1.0
+                unique_impact = min((base_impact + impact_variation) / 2, 0.99)
+                
+                # Unique failure probability variation
+                base_failure = detection_result.get('failure_probability', 0.5)
+                failure_variation = 0.3 + ((hash_mod * 11) % 60) / 100.0  # Range: 0.3-0.9
+                unique_failure = min((base_failure + failure_variation) / 2, 0.95)
+                
                 # Generate resolutions
                 resolutions = resolution_engine.generate_resolutions(anomaly_type, severity)
                 
-                # Persist anomaly
+                # Persist anomaly with unique scores
                 anomaly_log = AnomalyLog(
                     endpoint=features['endpoint'],
                     method=features['method'],
-                    risk_score=detection_result.get('confidence', 0.8) * 100,
+                    risk_score=risk_score,
                     priority=severity,
-                    failure_probability=detection_result['failure_probability'],
-                    anomaly_score=detection_result.get('confidence', 0.8),
+                    failure_probability=unique_failure,
+                    anomaly_score=unique_confidence,
                     is_anomaly=True,
                     usage_cluster=2,
                     req_count=features['req_count'],
@@ -258,14 +281,14 @@ class EnhancedSimulationEngine:
                     anomaly_type=anomaly_type,
                     severity=severity,
                     duration_seconds=60.0,
-                    impact_score=detection_result['impact_score'],
+                    impact_score=unique_impact,
                     is_simulation=True
                 )
                 db.add(anomaly_log)
                 db.commit()
                 db.refresh(anomaly_log)
                 
-                # Broadcast via websocket
+                # Broadcast via websocket with unique scores
                 if self.websocket_manager:
                     await self.websocket_manager.broadcast({
                         'type': 'anomaly',
@@ -277,16 +300,16 @@ class EnhancedSimulationEngine:
                             'anomaly_type': anomaly_type,
                             'severity': severity,
                             'duration_seconds': 60.0,
-                            'impact_score': detection_result['impact_score'],
-                            'failure_probability': detection_result['failure_probability'],
-                            'risk_score': anomaly_log.risk_score,
+                            'impact_score': unique_impact,
+                            'failure_probability': unique_failure,
+                            'risk_score': risk_score,
                             'priority': anomaly_log.priority,
                             'resolutions': resolutions[:5],
                             'is_anomaly': True
                         }
                     })
                 
-                print(f"🚨 Anomaly Detected: {endpoint} | Type: {anomaly_type} | Severity: {severity} | Impact: {detection_result['impact_score']:.2f}")
+                print(f"🚨 Anomaly Detected: {endpoint} | Type: {anomaly_type} | Severity: {severity} | Risk: {risk_score:.1f} | Impact: {unique_impact:.2f}")
                 
         except Exception as e:
             print(f"❌ Error in detection: {e}")

@@ -1,11 +1,12 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import useAnomalyNotifications from './hooks/useAnomalyNotifications';
 import DashboardEnhanced from './pages/DashboardEnhanced';
 import ComprehensiveDashboard from './pages/ComprehensiveDashboard';
 import Analytics from './pages/Analytics';
 import AdminPanel from './pages/AdminPanel';
-import MLFeatures from './pages/MLFeatures';
+import IPRiskMonitor from './pages/IPRiskMonitor';
 
 const Navigation: React.FC = () => {
   const location = useLocation();
@@ -14,7 +15,7 @@ const Navigation: React.FC = () => {
     { path: '/', label: 'Dashboard', icon: '🛡️' },
     { path: '/comprehensive', label: 'Analytics & Graphs', icon: '📈' },
     { path: '/analytics', label: 'Endpoint Analytics', icon: '🎯' },
-    { path: '/ml-features', label: 'ML Features', icon: '🤖' },
+    { path: '/ip-risk', label: 'IP Risk Monitor', icon: '🔒' },
     { path: '/admin', label: 'Admin Panel', icon: '⚙️' },
   ];
 
@@ -55,6 +56,9 @@ const Navigation: React.FC = () => {
 };
 
 const App: React.FC = () => {
+  // Enable global anomaly notifications
+  useAnomalyNotifications(true);
+
   return (
     <Router>
       <div className="min-h-screen bg-dark-bg">
@@ -64,7 +68,7 @@ const App: React.FC = () => {
             <Route path="/" element={<DashboardEnhanced />} />
             <Route path="/comprehensive" element={<ComprehensiveDashboard />} />
             <Route path="/analytics" element={<Analytics />} />
-            <Route path="/ml-features" element={<MLFeatures />} />
+            <Route path="/ip-risk" element={<IPRiskMonitor />} />
             <Route path="/admin" element={<AdminPanel />} />
           </Routes>
         </main>

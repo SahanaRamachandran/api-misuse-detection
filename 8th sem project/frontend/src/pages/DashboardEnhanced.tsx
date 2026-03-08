@@ -369,12 +369,16 @@ if (loading) {
                 onChange={(e) => setSimulatedEndpoint(e.target.value as SimulatedEndpoint)}
                 disabled={simulationActive}
                 className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+                style={{ 
+                  color: 'white',
+                  backgroundColor: '#1f2937'
+                }}
               >
-                <option value="/sim/login">🔐 /sim/login (ERROR_SPIKE)</option>
-                <option value="/sim/search">🔍 /sim/search (TRAFFIC_BURST)</option>
-                <option value="/sim/profile">👤 /sim/profile (TIMEOUT)</option>
-                <option value="/sim/payment">💳 /sim/payment (LATENCY_SPIKE)</option>
-                <option value="/sim/signup">📝 /sim/signup (RESOURCE_EXHAUSTION)</option>
+                <option value="/sim/login" style={{ color: 'white', backgroundColor: '#1f2937' }}>🔐 /sim/login (ERROR_SPIKE)</option>
+                <option value="/sim/search" style={{ color: 'white', backgroundColor: '#1f2937' }}>🔍 /sim/search (TRAFFIC_BURST)</option>
+                <option value="/sim/profile" style={{ color: 'white', backgroundColor: '#1f2937' }}>👤 /sim/profile (TIMEOUT)</option>
+                <option value="/sim/payment" style={{ color: 'white', backgroundColor: '#1f2937' }}>💳 /sim/payment (LATENCY_SPIKE)</option>
+                <option value="/sim/signup" style={{ color: 'white', backgroundColor: '#1f2937' }}>📝 /sim/signup (RESOURCE_EXHAUSTION)</option>
               </select>
             </div>
             

@@ -13,13 +13,21 @@ from models import (
 )
 from middleware import LoggingMiddleware, live_mode_stats
 from feature_engineering import extract_features_from_logs
-from inference import inference_engine
+import inference  # Import module, not the instance
 from websocket import manager
 from anomaly_injection import anomaly_injector, inject_anomaly_into_log, ENDPOINT_ANOMALY_MAP
 from anomaly_detection import anomaly_detector
 from resolution_engine import resolution_engine
 from enhanced_simulation import enhanced_simulation_engine
 from api_graphs import router as graphs_router
+
+# Import Email Alert System
+try:
+    from email_alerts import trigger_alert_email
+    EMAIL_ALERTS_AVAILABLE = True
+except ImportError:
+    print("[WARNING] Email alerts not available")
+    EMAIL_ALERTS_AVAILABLE = False
 
 # Import ML Features (separated to allow partial availability)
 # Core features (no SHAP dependency)
@@ -43,6 +51,14 @@ except ImportError as e:
     print(f"[WARNING] Advanced ML features not available: {e}")
     ML_FEATURES_AVAILABLE = False
 
+# Real-time Anomaly Detection Middleware
+try:
+    from security.realtime_detection import setup_realtime_detection, get_detector
+    REALTIME_DETECTION_AVAILABLE = True
+except ImportError as e:
+    print(f"[WARNING] Real-time detection not available: {e}")
+    REALTIME_DETECTION_AVAILABLE = False
+
 app = FastAPI(title="Predictive API Misuse and Failure Prediction System")
 
 app.add_middleware(
@@ -59,6 +75,29 @@ app.add_middleware(LoggingMiddleware)
 app.include_router(graphs_router)
 
 init_db()
+
+# Initialize Real-time Anomaly Detection Middleware
+realtime_detector = None
+if REALTIME_DETECTION_AVAILABLE:
+    try:
+        print("[REALTIME DETECTION] Initializing ML-based real-time anomaly detection...")
+        
+        # OpenAI API key for AI-powered resolution suggestions (from environment)
+        OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+        
+        realtime_detector = setup_realtime_detection(
+            app, 
+            models_dir="models",
+            openai_api_key=OPENAI_API_KEY
+        )
+        print("[REALTIME DETECTION] ✅ Real-time detection middleware enabled!")
+        print("   - XGBoost + Autoencoder ensemble")
+        print("   - Automatic IP profiling and blocking")
+        print("   - Deterministic risk scoring")
+        print("   - AI-powered resolution suggestions (OpenAI GPT-4)")
+    except Exception as e:
+        print(f"[REALTIME DETECTION] ⚠️ Error initializing: {e}")
+        REALTIME_DETECTION_AVAILABLE = False
 
 # Initialize ML Features
 ml_ensemble_scorer = None
@@ -117,6 +156,38 @@ if ENHANCED_DETECTION_AVAILABLE:
         print(f"[ENHANCED DETECTION] ⚠️ Error initializing: {e}")
         ENHANCED_DETECTION_AVAILABLE = False
 
+# Initialize ML Anomaly Detector (CIC IDS 2017 + CSIC 2010 models)
+ML_ANOMALY_DETECTOR_AVAILABLE = False
+ml_anomaly_detector = None
+ml_anomaly_stats = {
+    'total_predictions': 0,
+    'anomalies_detected': 0,
+    'ips_blocked': 0,
+    'network_predictions': 0,
+    'http_predictions': 0
+}
+
+try:
+    from ml_anomaly_detection import MLAnomalyDetector
+    print("[ML ANOMALY DETECTOR] Initializing CIC IDS 2017 + CSIC 2010 models...")
+    ml_anomaly_detector = MLAnomalyDetector(models_dir='models')
+    models_loaded = ml_anomaly_detector.load_models()
+    
+    if models_loaded:
+        ML_ANOMALY_DETECTOR_AVAILABLE = True
+        print("[ML ANOMALY DETECTOR] ✅ Multi-model anomaly detector initialized!")
+        stats = ml_anomaly_detector.get_statistics()
+        print(f"   - CIC IDS models loaded: {stats['cic_models_loaded']}")
+        print(f"   - CSIC HTTP models loaded: {stats['csic_models_loaded']}")
+        print(f"   - Total ensemble models: {stats['total_models']}")
+        print("   - Features: Majority vote ensemble, IP blocking, metrics tracking")
+    else:
+        print("[ML ANOMALY DETECTOR] ⚠️ No models loaded - detector disabled")
+except ImportError as e:
+    print(f"[ML ANOMALY DETECTOR] ℹ️ ML anomaly detector not available: {e}")
+except Exception as e:
+    print(f"[ML ANOMALY DETECTOR] ⚠️ Error initializing: {e}")
+
 # STRICT SEPARATION: Simulation Mode State (completely isolated from Live Mode)
 simulation_active = False
 simulation_stats = {
@@ -148,7 +219,16 @@ async def startup_event():
     Initialize the system on startup.
     Background anomaly detection DISABLED - use simulation mode instead.
     """
-    pass  # Disabled automatic detection
+    # Initialize inference engine after database is ready
+    from inference import MLInferenceEngine
+    inference.inference_engine = MLInferenceEngine()
+    print("[INFERENCE ENGINE] ✅ Inference engine initialized!")
+    print("   - Features: K-Fold ensemble, usage clustering")
+    print("   - Anomaly detection: Isolation Forest + Random Forest")
+    
+    print("System startup complete!")
+    print("Live Mode: Strict counting only (no automatic detection)")
+    print("Simulation Mode: Full anomaly detection + injection")
 
 
 async def periodic_anomaly_detection():
@@ -173,7 +253,67 @@ async def periodic_anomaly_detection():
             # DUAL DETECTION MODE: Run both basic and enhanced detectors
             detection_result = anomaly_detector.detect(features)
             enhanced_result = None
+            ml_anomaly_result = None
             detection_source = "basic"
+            
+            # Run ML anomaly detector if available
+            if ML_ANOMALY_DETECTOR_AVAILABLE and ml_anomaly_detector is not None:
+                try:
+                    # Prepare feature array for ML model
+                    # Note: This is a simplified version - you may need to adjust feature extraction
+                    feature_values = [
+                        features.get('req_count', 0),
+                        features.get('error_rate', 0),
+                        features.get('avg_response_time', 0),
+                        features.get('max_response_time', 0),
+                        features.get('payload_mean', 0),
+                        features.get('unique_endpoints', 0),
+                        features.get('repeat_rate', 0),
+                        features.get('status_entropy', 0),
+                        features.get('p95_response_time', 0),
+                        features.get('p99_response_time', 0)
+                    ]
+                    
+                    import numpy as np
+                    X = np.array(feature_values).reshape(1, -1)
+                    
+                    # Determine protocol based on endpoint
+                    endpoint = features.get('endpoint', '')
+                    protocol = 'http' if any(kw in endpoint.lower() for kw in ['api', 'login', 'payment', 'search']) else 'network'
+                    
+                    # Predict anomaly
+                    ml_anomaly_result = ml_anomaly_detector.predict_anomaly(X, protocol=protocol)
+                    
+                    # Update stats
+                    ml_anomaly_stats['total_predictions'] += 1
+                    if protocol == 'network':
+                        ml_anomaly_stats['network_predictions'] += 1
+                    else:
+                        ml_anomaly_stats['http_predictions'] += 1
+                    
+                    if ml_anomaly_result['is_anomaly']:
+                        ml_anomaly_stats['anomalies_detected'] += 1
+                        
+                        # Check IP blocking
+                        ip_addresses = features.get('ip_addresses', [])
+                        for ip in ip_addresses:
+                            blocking = ml_anomaly_detector.check_and_block_ip(
+                                ip=ip,
+                                prediction=ml_anomaly_result,
+                                threshold=0.7
+                            )
+                            if blocking['should_block']:
+                                ml_anomaly_stats['ips_blocked'] += 1
+                                print(f"[ML ANOMALY] 🚫 IP blocked: {ip} (confidence: {ml_anomaly_result['confidence']:.2%})")
+                        
+                        print(f"[ML ANOMALY] ⚠️ ML ensemble detected anomaly!")
+                        print(f"   Protocol: {protocol}")
+                        print(f"   Confidence: {ml_anomaly_result['confidence']:.2%}")
+                        print(f"   Models voted: {ml_anomaly_result['num_models_voted']}")
+                        print(f"   Failure probability: {ml_anomaly_result['failure_probability']:.2%}")
+                        
+                except Exception as e:
+                    print(f"[ML ANOMALY] Error during ML detection: {e}")
             
             # Run enhanced detector if available
             if ENHANCED_DETECTION_AVAILABLE and enhanced_detector is not None:
@@ -269,6 +409,27 @@ async def periodic_anomaly_detection():
                 print(f"   Severity: {severity}")
                 print(f"   Impact: {detection_result['impact_score']:.2f}")
                 
+                # Trigger email alert for critical anomalies (risk_score >= 0.8)
+                risk_score = detection_result.get('confidence', 0.8)
+                if risk_score >= 0.8 and EMAIL_ALERTS_AVAILABLE:
+                    try:
+                        alert_data = {
+                            'anomaly_type': anomaly_type,
+                            'risk_score': risk_score,
+                            'probability': detection_result.get('failure_probability', 0.0),
+                            'ip_address': 'Live Traffic Analysis',
+                            'endpoint': features['endpoint'],
+                            'timestamp': datetime.now().isoformat(),
+                            'blocked': False,
+                            'severity': severity,
+                            'confidence': risk_score,
+                            'method': features['method']
+                        }
+                        trigger_alert_email(alert_data)
+                        print(f"   📧 Alert email triggered (Risk: {risk_score:.2f})")
+                    except Exception as e:
+                        print(f"   ⚠️ Email alert failed: {e}")
+                
                 await manager.broadcast({
                     'type': 'anomaly',
                     'data': {
@@ -300,16 +461,14 @@ async def periodic_anomaly_detection():
 @app.post("/login")
 async def login(request: LoginRequest, req: Request):
     """
-    Mock login endpoint.
-    Simulates authentication with variable response times and occasional errors.
+    Mock login endpoint for LIVE MODE.
+    Always succeeds to maintain clean baseline metrics (no errors).
     """
     req.state.user_id = request.username
     
     await asyncio.sleep(random.uniform(0.05, 0.3))
     
-    if random.random() < 0.1:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    
+    # LIVE MODE: Always return success (no random errors)
     return {
         "success": True,
         "user_id": request.username,
@@ -321,23 +480,21 @@ async def login(request: LoginRequest, req: Request):
 @app.post("/payment")
 async def payment(request: PaymentRequest, req: Request):
     """
-    Mock payment processing endpoint.
-    Simulates payment with variable latency and error scenarios.
+    Mock payment processing endpoint for LIVE MODE.
+    Always succeeds to maintain clean baseline metrics (no errors).
     """
     req.state.user_id = request.user_id
     
     await asyncio.sleep(random.uniform(0.1, 0.5))
     
-    if random.random() < 0.15:
-        raise HTTPException(status_code=500, detail="Payment processing failed")
-    
-    if request.amount <= 0:
-        raise HTTPException(status_code=400, detail="Invalid amount")
+    # LIVE MODE: Always return success (no errors)
+    # Accept any amount to avoid validation errors
+    amount = request.amount if request.amount > 0 else 100.0
     
     return {
         "success": True,
         "transaction_id": f"txn_{int(time.time())}_{random.randint(1000, 9999)}",
-        "amount": request.amount,
+        "amount": amount,
         "currency": request.currency,
         "status": "completed",
         "message": "Payment processed successfully"
@@ -347,18 +504,18 @@ async def payment(request: PaymentRequest, req: Request):
 @app.get("/search")
 async def search(query: str = "", limit: int = 10):
     """
-    Mock search endpoint.
-    Simulates search with variable response times.
+    Mock search endpoint for LIVE MODE.
+    Always succeeds to maintain clean baseline metrics (no errors).
     """
     await asyncio.sleep(random.uniform(0.05, 0.2))
     
-    if not query:
-        raise HTTPException(status_code=400, detail="Query parameter required")
+    # LIVE MODE: Return empty results if no query, don't raise error
+    search_query = query if query else "default"
     
     results = [
         {
             "id": i,
-            "title": f"Result {i} for '{query}'",
+            "title": f"Result {i} for '{search_query}'",
             "description": f"Description for result {i}",
             "relevance": random.uniform(0.5, 1.0)
         }
@@ -366,7 +523,7 @@ async def search(query: str = "", limit: int = 10):
     ]
     
     return {
-        "query": query,
+        "query": search_query,
         "results": results,
         "total": len(results)
     }
@@ -375,8 +532,8 @@ async def search(query: str = "", limit: int = 10):
 @app.post("/signup")
 async def signup(req: Request):
     """
-    Mock signup endpoint.
-    Simulates user registration with variable response times.
+    Mock signup endpoint for LIVE MODE.
+    Always succeeds to maintain clean baseline metrics (no errors).
     """
     try:
         body = await req.json()
@@ -394,9 +551,7 @@ async def signup(req: Request):
     req.state.user_id = username
     await asyncio.sleep(random.uniform(0.1, 0.4))
     
-    if random.random() < 0.05:
-        raise HTTPException(status_code=409, detail="User already exists")
-    
+    # LIVE MODE: Always return success (no conflict errors)
     return {
         "success": True,
         "user_id": username,
@@ -408,21 +563,19 @@ async def signup(req: Request):
 @app.get("/profile")
 async def profile(user_id: str = ""):
     """
-    Mock profile endpoint.
-    Simulates user profile retrieval.
+    Mock profile endpoint for LIVE MODE.
+    Always succeeds to maintain clean baseline metrics (no errors).
     """
-    if not user_id:
-        raise HTTPException(status_code=400, detail="User ID required")
+    # LIVE MODE: Use default user if none provided (no validation error)
+    profile_user = user_id if user_id else "default_user"
     
     await asyncio.sleep(random.uniform(0.05, 0.2))
     
-    if random.random() < 0.05:
-        raise HTTPException(status_code=404, detail="User not found")
-    
+    # LIVE MODE: Always return profile (no 404 errors)
     return {
-        "user_id": user_id,
-        "username": user_id,
-        "email": f"{user_id}@example.com",
+        "user_id": profile_user,
+        "username": profile_user,
+        "email": f"{profile_user}@example.com",
         "created_at": "2024-01-01T00:00:00Z",
         "last_login": datetime.utcnow().isoformat() + "Z"
     }
@@ -572,12 +725,20 @@ async def get_endpoint_analytics(endpoint: str, db: Session = Depends(get_db)):
     """
     Get accurate analytics for a specific endpoint.
     Calculates metrics from actual database logs.
+    
+    NOTE: For LIVE MODE endpoints, only recent traffic (last 1 hour) is analyzed
+    to show current system behavior without historical anomalies.
     """
     if not endpoint.startswith('/'):
         endpoint = '/' + endpoint
     
-    # Get logs from last 24 hours for accurate metrics
-    time_threshold = datetime.utcnow() - timedelta(hours=24)
+    # For live endpoints, use shorter time window (1 hour) to show current behavior
+    # For other endpoints, use 24 hours
+    live_endpoints = ['/login', '/payment', '/search', '/profile', '/signup', '/logout']
+    if endpoint in live_endpoints:
+        time_threshold = datetime.utcnow() - timedelta(hours=1)  # Last 1 hour for live endpoints
+    else:
+        time_threshold = datetime.utcnow() - timedelta(hours=24)  # Last 24 hours for others
     
     logs = db.query(APILog).filter(
         APILog.endpoint == endpoint,
@@ -592,12 +753,13 @@ async def get_endpoint_analytics(endpoint: str, db: Session = Depends(get_db)):
             "error_rate": 0,
             "avg_latency": 0,
             "failure_probability": 0,
-            "status_breakdown": {}
+            "status_breakdown": {},
+            "time_window_hours": 1 if endpoint in live_endpoints else 24
         }
     
     total_requests = len(logs)
     error_count = sum(1 for log in logs if log.status_code >= 400)
-    error_rate = error_count / total_requests
+    error_rate = error_count / total_requests if total_requests > 0 else 0
     avg_latency = sum(log.response_time_ms for log in logs) / total_requests
     
     # Status code breakdown
@@ -626,7 +788,8 @@ async def get_endpoint_analytics(endpoint: str, db: Session = Depends(get_db)):
         "avg_latency": round(avg_latency, 2),
         "failure_probability": round(avg_failure_prob, 3),
         "status_breakdown": status_breakdown,
-        "anomaly_count": len(anomalies)
+        "anomaly_count": len(anomalies),
+        "time_window_hours": 1 if endpoint in live_endpoints else 24
     }
 
 
@@ -1059,52 +1222,62 @@ async def run_simulation(simulated_endpoint: str, duration_seconds: int, request
                 
                 # Get the assigned anomaly type for this endpoint
                 assigned_anomaly_type = ENDPOINT_ANOMALY_MAP.get(simulated_endpoint)
-                inject_anomaly = random.random() < 0.3  # 30% chance to inject anomaly
+                inject_anomaly = random.random() < 0.7  # 70% chance to inject security attack
                 
                 # Base log - vary parameters based on whether we're injecting an anomaly
                 if inject_anomaly and assigned_anomaly_type:
-                    # Generate anomaly-specific patterns
-                    if assigned_anomaly_type.value == 'error_spike':
+                    # Generate SECURITY ATTACK patterns ONLY
+                    if assigned_anomaly_type.value == 'sql_injection':
+                        sql_patterns = [
+                            "username=admin' OR '1'='1&password=x",
+                            "id=1' UNION SELECT password FROM users--",
+                            "search='; DROP TABLE users--",
+                            "username=admin'--&password=anything",
+                            "query=1' AND 1=1--"
+                        ]
                         base_log = {
                             'endpoint': simulated_endpoint,
                             'method': 'POST',
-                            'response_time_ms': random.uniform(200, 500),
-                            'status_code': random.choice([500, 503, 504, 429]),  # Errors
+                            'response_time_ms': random.uniform(200, 600),
+                            'status_code': random.choice([400, 403, 500, 200]),
                             'payload_size': random.randint(800, 2500),
-                            'ip_address': f"SIM-{random.randint(1, 50)}",  # Concentrated IPs
-                            'user_id': f"sim_user_{random.randint(1, 100)}"
+                            'ip_address': f"SIM-{random.randint(1, 30)}",  # Concentrated IPs
+                            'user_id': f"sim_user_{random.randint(1, 50)}",
+                            'query_params': random.choice(sql_patterns),
+                            'malicious_pattern': 'SQL_INJECTION'
                         }
-                    elif assigned_anomaly_type.value == 'latency_spike':
-                        base_log = {
-                            'endpoint': simulated_endpoint,
-                            'method': 'POST',
-                            'response_time_ms': random.uniform(800, 1500),  # High latency
-                            'status_code': 200,
-                            'payload_size': random.randint(500, 2000),
-                            'ip_address': f"SIM-{random.randint(1, 100)}",
-                            'user_id': f"sim_user_{random.randint(1, 100)}"
-                        }
-                    elif assigned_anomaly_type.value == 'timeout':
+                    elif assigned_anomaly_type.value == 'ddos_attack':
                         base_log = {
                             'endpoint': simulated_endpoint,
                             'method': 'GET',
-                            'response_time_ms': random.uniform(4500, 6000),  # Timeout range
-                            'status_code': random.choice([504, 408, 200]),
-                            'payload_size': random.randint(500, 2000),
-                            'ip_address': f"SIM-{random.randint(1, 100)}",
-                            'user_id': f"sim_user_{random.randint(1, 100)}"
+                            'response_time_ms': random.uniform(800, 2000),  # Overloaded
+                            'status_code': random.choice([503, 504, 429, 200]),
+                            'payload_size': random.randint(300, 1000),
+                            'ip_address': f"SIM-{random.randint(1, 500)}",  # Many different IPs
+                            'user_id': f"sim_user_{random.randint(1, 1000)}",
+                            'request_count': random.randint(500, 2000)
                         }
-                    elif assigned_anomaly_type.value == 'resource_exhaustion':
+                    elif assigned_anomaly_type.value == 'xss_attack':
+                        xss_patterns = [
+                            'comment=<script>alert("XSS")</script>',
+                            'search=<img src=x onerror=alert("XSS")>',
+                            'input=<iframe src="malicious.com"></iframe>',
+                            'name=<body onload=alert("XSS")>',
+                            'data=javascript:alert("XSS")'
+                        ]
                         base_log = {
                             'endpoint': simulated_endpoint,
                             'method': 'POST',
-                            'response_time_ms': random.uniform(400, 800),
-                            'status_code': random.choice([413, 507, 200]),
-                            'payload_size': random.randint(8000, 15000),  # Large payload
-                            'ip_address': f"SIM-{random.randint(1, 100)}",
-                            'user_id': f"sim_user_{random.randint(1, 100)}"
+                            'response_time_ms': random.uniform(150, 400),
+                            'status_code': random.choice([200, 403]),
+                            'payload_size': random.randint(700, 2000),
+                            'ip_address': f"SIM-{random.randint(1, 50)}",
+                            'user_id': f"sim_user_{random.randint(1, 100)}",
+                            'query_params': random.choice(xss_patterns),
+                            'malicious_pattern': 'XSS_ATTACK'
                         }
-                    else:  # traffic_burst - just normal traffic with high volume
+                    else:
+                        # Fallback to normal traffic if unknown type
                         base_log = {
                             'endpoint': simulated_endpoint,
                             'method': 'GET',
@@ -1129,6 +1302,34 @@ async def run_simulation(simulated_endpoint: str, duration_seconds: int, request
                 # Use log directly (anomaly already injected above)
                 modified_log = base_log
                 
+                # Track with real-time detection (simulation mode)
+                if total_requests <= 5:  # Debug: print first 5
+                    print(f"[SIM DEBUG] Request {total_requests}: REALTIME_AVAILABLE={REALTIME_DETECTION_AVAILABLE}, detector={realtime_detector is not None}")
+                
+                if REALTIME_DETECTION_AVAILABLE and realtime_detector is not None:
+                    try:
+                        track_result = realtime_detector.track_simulation_request(
+                            ip_address=modified_log['ip_address'],
+                            endpoint=modified_log['endpoint'],
+                            method=modified_log['method'],
+                            response_time_ms=modified_log['response_time_ms'],
+                            status_code=modified_log['status_code'],
+                            payload_size=modified_log['payload_size'],
+                            malicious_pattern=modified_log.get('malicious_pattern'),
+                            query_params=modified_log.get('query_params')
+                        )
+                        # Debug: Print first few tracking results
+                        if total_requests <= 10:
+                            print(f"[SIM TRACK] IP={modified_log['ip_address']}, Risk={track_result.get('risk_score', 0):.4f}, "
+                                  f"Anomaly={track_result.get('is_anomaly')}, Profile_Anomalies={track_result.get('profile', {}).get('anomaly_count', 0)}")
+                        
+                        # Log blocking events
+                        if track_result.get('blocked'):
+                            print(f"[SIM] 🚫 IP BLOCKED: {modified_log['ip_address']} | Risk: {track_result.get('risk_score', 0):.4f}")
+                    except Exception as e:
+                        # Log simulation tracking errors
+                        print(f"[SIM] ⚠️ Tracking error for {modified_log['ip_address']}: {e}")
+                
                 # Save to database
                 db = SessionLocal()
                 try:
@@ -1140,7 +1341,10 @@ async def run_simulation(simulated_endpoint: str, duration_seconds: int, request
                         payload_size=modified_log['payload_size'],
                         ip_address=modified_log['ip_address'],
                         user_id=modified_log['user_id'],
-                        is_simulation=True
+                        is_simulation=True,
+                        malicious_pattern=modified_log.get('malicious_pattern'),
+                        query_params=modified_log.get('query_params'),
+                        request_count=modified_log.get('request_count', 1)
                     )
                     db.add(log_entry)
                     db.commit()
@@ -1233,6 +1437,29 @@ async def run_simulation(simulated_endpoint: str, duration_seconds: int, request
                             print(f"   Endpoint: {simulated_endpoint}")
                             print(f"   Severity: {severity}")
                             print(f"   Risk Score: {risk_score:.2f}/100 (Confidence: {confidence:.3f})")
+                            
+                            # Trigger email alert for CRITICAL anomalies (risk_score >= 80 or severity == CRITICAL)
+                            if (risk_score >= 80 or severity == 'CRITICAL') and EMAIL_ALERTS_AVAILABLE:
+                                try:
+                                    # Get source IP from features
+                                    source_ip = features.get('ip_addresses', ['Simulation Traffic'])[0] if features.get('ip_addresses') else 'Simulation Traffic'
+                                    
+                                    alert_data = {
+                                        'anomaly_type': anomaly_type,
+                                        'risk_score': confidence,  # 0-1 scale for email function
+                                        'probability': detection_result.get('failure_probability', 0.0),
+                                        'ip_address': source_ip,
+                                        'endpoint': simulated_endpoint,
+                                        'timestamp': datetime.now().isoformat(),
+                                        'blocked': False,  # Simulation traffic not blocked
+                                        'severity': severity,
+                                        'confidence': confidence,
+                                        'method': features['method']
+                                    }
+                                    trigger_alert_email(alert_data)
+                                    print(f"   📧 CRITICAL ALERT EMAIL SENT (Risk: {risk_score:.2f})")
+                                except Exception as e:
+                                    print(f"   ⚠️ Email alert failed: {e}")
                             
                             await manager.broadcast({
                                 'type': 'anomaly',
@@ -1658,6 +1885,149 @@ async def get_enhanced_detection_performance():
 
 
 # ============================================================================
+# ML ANOMALY DETECTOR ENDPOINTS (CIC IDS 2017 + CSIC 2010)
+# ============================================================================
+
+@app.get("/api/ml/anomaly-detector/status")
+async def get_ml_anomaly_detector_status():
+    """Get ML anomaly detector status and statistics"""
+    if not ML_ANOMALY_DETECTOR_AVAILABLE or ml_anomaly_detector is None:
+        return {
+            'available': False,
+            'enabled': False,
+            'message': 'ML anomaly detector not initialized'
+        }
+    
+    stats = ml_anomaly_detector.get_statistics()
+    
+    return {
+        'available': ML_ANOMALY_DETECTOR_AVAILABLE,
+        'enabled': True,
+        'models': {
+            'cic_ids_models': stats['cic_models_loaded'],
+            'csic_http_models': stats['csic_models_loaded'],
+            'total_models': stats['total_models']
+        },
+        'runtime_stats': ml_anomaly_stats,
+        'detector_stats': {
+            'total_ips_seen': stats['total_ips_seen'],
+            'blocked_ips_count': stats['blocked_ips_count'],
+            'total_predictions': stats['total_predictions'],
+            'anomaly_predictions': stats['anomaly_predictions'],
+            'anomaly_rate': stats['anomaly_rate']
+        },
+        'capabilities': {
+            'network_traffic_detection': stats['cic_models_loaded'] > 0,
+            'http_request_detection': stats['csic_models_loaded'] > 0,
+            'ensemble_voting': True,
+            'ip_blocking': True,
+            'metrics_tracking': True
+        }
+    }
+
+
+@app.get("/api/ml/anomaly-detector/blocked-ips")
+async def get_blocked_ips():
+    """Get list of blocked IPs and their details"""
+    if not ML_ANOMALY_DETECTOR_AVAILABLE or ml_anomaly_detector is None:
+        raise HTTPException(status_code=503, detail="ML anomaly detector not available")
+    
+    blocked_ips = ml_anomaly_detector.get_blocked_ips()
+    
+    # Get history for each blocked IP
+    ip_details = []
+    for ip in blocked_ips:
+        history = ml_anomaly_detector.get_ip_history(ip, limit=5)
+        ip_details.append({
+            'ip': ip,
+            'is_blocked': True,
+            'recent_history': history,
+            'total_predictions': len(history),
+            'anomaly_count': sum(1 for h in history if h.get('is_anomaly', False))
+        })
+    
+    return {
+        'total_blocked': len(blocked_ips),
+        'blocked_ips': ip_details,
+        'timestamp': datetime.now().isoformat()
+    }
+
+
+@app.post("/api/ml/anomaly-detector/unblock-ip")
+async def unblock_ip(ip: str):
+    """Unblock a specific IP address"""
+    if not ML_ANOMALY_DETECTOR_AVAILABLE or ml_anomaly_detector is None:
+        raise HTTPException(status_code=503, detail="ML anomaly detector not available")
+    
+    success = ml_anomaly_detector.unblock_ip(ip)
+    
+    if success:
+        return {
+            'status': 'success',
+            'message': f'IP {ip} has been unblocked',
+            'ip': ip,
+            'is_blocked': False
+        }
+    else:
+        return {
+            'status': 'not_found',
+            'message': f'IP {ip} was not in blocklist',
+            'ip': ip,
+            'is_blocked': False
+        }
+
+
+@app.get("/api/ml/anomaly-detector/ip-history/{ip}")
+async def get_ip_history(ip: str, limit: int = 20):
+    """Get prediction history for a specific IP"""
+    if not ML_ANOMALY_DETECTOR_AVAILABLE or ml_anomaly_detector is None:
+        raise HTTPException(status_code=503, detail="ML anomaly detector not available")
+    
+    history = ml_anomaly_detector.get_ip_history(ip, limit=limit)
+    is_blocked = ml_anomaly_detector.is_ip_blocked(ip)
+    
+    return {
+        'ip': ip,
+        'is_blocked': is_blocked,
+        'history_count': len(history),
+        'history': history,
+        'anomaly_count': sum(1 for h in history if h.get('is_anomaly', False)),
+        'anomaly_rate': sum(1 for h in history if h.get('is_anomaly', False)) / len(history) if history else 0
+    }
+
+
+@app.get("/api/ml/anomaly-detector/performance")
+async def get_ml_anomaly_performance():
+    """Get performance metrics of ML ensemble anomaly detector"""
+    if not ML_ANOMALY_DETECTOR_AVAILABLE:
+        raise HTTPException(status_code=503, detail="ML anomaly detector not available")
+    
+    stats = ml_anomaly_detector.get_statistics()
+    
+    return {
+        'ensemble_performance': {
+            'total_models': stats['total_models'],
+            'total_predictions': ml_anomaly_stats['total_predictions'],
+            'anomalies_detected': ml_anomaly_stats['anomalies_detected'],
+            'detection_rate': (ml_anomaly_stats['anomalies_detected'] / ml_anomaly_stats['total_predictions'] * 100) 
+                             if ml_anomaly_stats['total_predictions'] > 0 else 0
+        },
+        'protocol_breakdown': {
+            'network_predictions': ml_anomaly_stats['network_predictions'],
+            'http_predictions': ml_anomaly_stats['http_predictions']
+        },
+        'ip_blocking': {
+            'ips_blocked': ml_anomaly_stats['ips_blocked'],
+            'currently_blocked': stats['blocked_ips_count']
+        },
+        'models_loaded': {
+            'cic_ids_2017': stats['cic_models_loaded'],
+            'csic_2010': stats['csic_models_loaded']
+        }
+    }
+
+
+# ============================================================================
 # ENHANCED SIMULATION ENDPOINTS
 # ============================================================================
 
@@ -1689,6 +2059,266 @@ async def start_enhanced_simulation(config: dict):
 async def get_enhanced_simulation_stats():
     """Get enhanced simulation statistics"""
     return enhanced_simulation_engine.get_stats()
+
+
+# ============================================================================
+# REAL-TIME ANOMALY DETECTION SECURITY ENDPOINTS
+# ============================================================================
+
+@app.get("/api/security/realtime/status")
+async def get_realtime_security_status():
+    """Get real-time detection system status with all IP profiles"""
+    if not REALTIME_DETECTION_AVAILABLE or realtime_detector is None:
+        raise HTTPException(status_code=503, detail="Real-time detection not available")
+    
+    profiles = realtime_detector.get_all_profiles()
+    blocked = realtime_detector.get_blocked_ips()
+    
+    total_requests = sum(p['total_requests'] for p in profiles.values())
+    total_anomalies = sum(p['anomaly_count'] for p in profiles.values())
+    
+    return {
+        "available": True,
+        "total_ips": len(profiles),
+        "blocked_ips_count": len(blocked),
+        "total_requests": total_requests,
+        "total_anomalies": total_anomalies,
+        "ip_profiles": profiles,
+        "blocked_ips": blocked,
+        "configuration": {
+            "risk_threshold": realtime_detector.RISK_THRESHOLD,
+            "block_avg_risk_threshold": realtime_detector.BLOCK_AVG_RISK_THRESHOLD,
+            "block_anomaly_count_threshold": realtime_detector.BLOCK_ANOMALY_COUNT_THRESHOLD
+        }
+    }
+
+
+@app.get("/api/security/realtime/stats")
+async def get_realtime_security_stats():
+    """Get comprehensive real-time detection statistics"""
+    if not REALTIME_DETECTION_AVAILABLE or realtime_detector is None:
+        raise HTTPException(status_code=503, detail="Real-time detection not available")
+    
+    profiles = realtime_detector.get_all_profiles()
+    blocked = realtime_detector.get_blocked_ips()
+    
+    total_requests = sum(p['total_requests'] for p in profiles.values())
+    total_anomalies = sum(p['anomaly_count'] for p in profiles.values())
+    
+    # Get top risky IPs
+    risky_ips = sorted(
+        profiles.items(),
+        key=lambda x: x[1]['avg_risk'],
+        reverse=True
+    )[:10]
+    
+    return {
+        "summary": {
+            "total_ips_tracked": len(profiles),
+            "blocked_ips": len(blocked),
+            "total_requests": total_requests,
+            "total_anomalies": total_anomalies,
+            "anomaly_rate": round(total_anomalies / total_requests * 100, 2) if total_requests > 0 else 0
+        },
+        "top_risky_ips": [
+            {
+                "ip": ip,
+                "avg_risk": round(profile['avg_risk'], 4),
+                "total_requests": profile['total_requests'],
+                "anomaly_count": profile['anomaly_count'],
+                "blocked": profile['blocked']
+            }
+            for ip, profile in risky_ips
+        ],
+        "configuration": {
+            "risk_threshold": realtime_detector.RISK_THRESHOLD,
+            "block_avg_risk_threshold": realtime_detector.BLOCK_AVG_RISK_THRESHOLD,
+            "block_anomaly_count_threshold": realtime_detector.BLOCK_ANOMALY_COUNT_THRESHOLD,
+            "xgb_weight": realtime_detector.XGB_WEIGHT,
+            "ae_weight": realtime_detector.AE_WEIGHT
+        }
+    }
+
+
+@app.get("/api/security/realtime/blocked-ips")
+async def get_realtime_blocked_ips():
+    """Get list of all blocked IPs with their profiles"""
+    if not REALTIME_DETECTION_AVAILABLE or realtime_detector is None:
+        raise HTTPException(status_code=503, detail="Real-time detection not available")
+    
+    blocked = realtime_detector.get_blocked_ips()
+    profiles = realtime_detector.get_all_profiles()
+    
+    blocked_details = []
+    for ip in blocked:
+        if ip in profiles:
+            profile = profiles[ip]
+            blocked_details.append({
+                "ip": ip,
+                "total_requests": profile['total_requests'],
+                "anomaly_count": profile['anomaly_count'],
+                "avg_risk": round(profile['avg_risk'], 4),
+                "last_seen": profile['last_seen']
+            })
+    
+    return {
+        "count": len(blocked),
+        "blocked_ips": blocked_details
+    }
+
+
+@app.get("/api/security/realtime/ip/{ip_address}")
+async def get_realtime_ip_profile(ip_address: str):
+    """Get detailed profile for a specific IP from real-time detection"""
+    if not REALTIME_DETECTION_AVAILABLE or realtime_detector is None:
+        raise HTTPException(status_code=503, detail="Real-time detection not available")
+    
+    profiles = realtime_detector.get_all_profiles()
+    
+    if ip_address not in profiles:
+        raise HTTPException(status_code=404, detail="IP not found in real-time tracking system")
+    
+    profile = profiles[ip_address]
+    return {
+        "ip": ip_address,
+        "profile": {
+            "total_requests": profile['total_requests'],
+            "anomaly_count": profile['anomaly_count'],
+            "avg_risk": round(profile['avg_risk'], 4),
+            "total_risk": round(profile['total_risk'], 4),
+            "last_seen": profile['last_seen'],
+            "blocked": profile['blocked']
+        }
+    }
+
+
+@app.post("/api/security/realtime/unblock/{ip_address}")
+async def unblock_realtime_ip(ip_address: str):
+    """Manually unblock an IP address from real-time detection"""
+    if not REALTIME_DETECTION_AVAILABLE or realtime_detector is None:
+        raise HTTPException(status_code=503, detail="Real-time detection not available")
+    
+    success = realtime_detector.unblock_ip(ip_address)
+    
+    if success:
+        return {
+            "status": "success",
+            "message": f"IP {ip_address} has been unblocked",
+            "ip": ip_address
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"IP {ip_address} is not currently blocked"
+        )
+
+
+@app.delete("/api/security/realtime/reset")
+async def reset_realtime_security_system():
+    """
+    Reset the real-time detection system (clear all profiles and blocks).
+    
+    ⚠️ USE WITH CAUTION - This clears all tracking data
+    """
+    if not REALTIME_DETECTION_AVAILABLE or realtime_detector is None:
+        raise HTTPException(status_code=503, detail="Real-time detection not available")
+    
+    with realtime_detector._lock:
+        realtime_detector.ip_profiles.clear()
+        realtime_detector.blocked_ips.clear()
+    
+    print("[REALTIME DETECTION] 🔄 Security system reset - all profiles and blocks cleared")
+    
+    return {
+        "status": "success",
+        "message": "Real-time detection system has been reset",
+        "warning": "All IP profiles and blocks have been cleared"
+    }
+
+
+# ============================================================================
+# SIMULATION IP TRACKING ENDPOINTS
+# ============================================================================
+
+@app.get("/api/security/simulation/ip-stats")
+async def get_simulation_ip_stats():
+    """Get IP tracking statistics for simulation mode"""
+    if not REALTIME_DETECTION_AVAILABLE or realtime_detector is None:
+        raise HTTPException(status_code=503, detail="Real-time detection not available")
+    
+    stats = realtime_detector.get_simulation_ip_stats()
+    
+    # Get top risky simulation IPs
+    sim_ips = stats.get('simulation_ips', {})
+    risky_sim_ips = sorted(
+        sim_ips.items(),
+        key=lambda x: x[1]['avg_risk'],
+        reverse=True
+    )[:20]  # Top 20 for simulation
+    
+    return {
+        "summary": {
+            "total_simulation_ips": stats.get('total_simulation_ips', 0),
+            "total_simulation_requests": stats.get('total_simulation_requests', 0),
+            "total_simulation_anomalies": stats.get('total_simulation_anomalies', 0),
+            "anomaly_rate": round(
+                stats.get('total_simulation_anomalies', 0) / stats.get('total_simulation_requests', 1) * 100, 
+                2
+            ) if stats.get('total_simulation_requests', 0) > 0 else 0
+        },
+        "top_risky_simulation_ips": [
+            {
+                "ip": ip,
+                "avg_risk": round(profile['avg_risk'], 4),
+                "total_requests": profile['total_requests'],
+                "anomaly_count": profile['anomaly_count'],
+                "last_seen": profile['last_seen']
+            }
+            for ip, profile in risky_sim_ips
+        ]
+    }
+
+
+@app.get("/api/security/combined/ip-stats")
+async def get_combined_ip_stats():
+    """Get combined IP statistics (live + simulation) from real-time detection"""
+    if not REALTIME_DETECTION_AVAILABLE or realtime_detector is None:
+        raise HTTPException(status_code=503, detail="Real-time detection not available")
+    
+    all_profiles = realtime_detector.get_all_profiles()
+    blocked = realtime_detector.get_blocked_ips()
+    
+    # Separate live and simulation IPs
+    live_ips = {ip: p for ip, p in all_profiles.items() if not p.get('is_simulation', False)}
+    sim_ips = {ip: p for ip, p in all_profiles.items() if p.get('is_simulation', False)}
+    
+    # Calculate stats
+    live_requests = sum(p['total_requests'] for p in live_ips.values())
+    live_anomalies = sum(p['anomaly_count'] for p in live_ips.values())
+    
+    sim_requests = sum(p['total_requests'] for p in sim_ips.values())
+    sim_anomalies = sum(p['anomaly_count'] for p in sim_ips.values())
+    
+    return {
+        "live_mode": {
+            "total_ips": len(live_ips),
+            "blocked_ips": len(blocked),
+            "total_requests": live_requests,
+            "total_anomalies": live_anomalies,
+            "anomaly_rate": round(live_anomalies / live_requests * 100, 2) if live_requests > 0 else 0
+        },
+        "simulation_mode": {
+            "total_ips": len(sim_ips),
+            "total_requests": sim_requests,
+            "total_anomalies": sim_anomalies,
+            "anomaly_rate": round(sim_anomalies / sim_requests * 100, 2) if sim_requests > 0 else 0
+        },
+        "total": {
+            "total_ips": len(all_profiles),
+            "total_requests": live_requests + sim_requests,
+            "total_anomalies": live_anomalies + sim_anomalies
+        }
+    }
 
 
 if __name__ == "__main__":

@@ -27,6 +27,9 @@ class APILog(Base):
     ip_address = Column(String)
     user_id = Column(String, nullable=True)
     is_simulation = Column(Boolean, default=False, index=True)  # Separate live from simulation
+    malicious_pattern = Column(String, nullable=True)  # Track SQL_INJECTION, XSS_ATTACK, etc.
+    query_params = Column(String, nullable=True)  # Store query parameters for analysis
+    request_count = Column(Integer, default=1)  # Track request volume for DDoS detection
 
 
 class AnomalyLog(Base):

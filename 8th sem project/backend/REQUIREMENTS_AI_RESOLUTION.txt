@@ -1,0 +1,18 @@
+# Additional Dependencies for AI Resolution & Email Alerts
+
+# AI Resolution Engine
+openai>=1.0.0  # OpenAI GPT-4 integration for AI-powered resolutions
+
+# Email Alert System
+aiosmtplib>=2.0.0  # Async SMTP client for sending email alerts
+
+# These should already be installed from previous setup:
+# tensorflow>=2.10.0  # For autoencoder model
+# xgboost>=1.7.0  # For XGBoost classifier
+# scikit-learn>=1.2.0  # For TF-IDF and scalers
+# numpy>=1.24.0  # For numerical operations
+# fastapi>=0.100.0  # For API
+# uvicorn>=0.23.0  # For server
+
+# Install with:
+# pip install openai aiosmtplib

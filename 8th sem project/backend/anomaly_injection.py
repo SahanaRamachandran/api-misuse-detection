@@ -9,12 +9,10 @@ import random
 
 
 class AnomalyType(Enum):
-    """Predefined anomaly types for injection."""
-    LATENCY_SPIKE = "latency_spike"
-    ERROR_SPIKE = "error_spike"
-    TIMEOUT = "timeout"
-    TRAFFIC_BURST = "traffic_burst"
-    RESOURCE_EXHAUSTION = "resource_exhaustion"
+    """Security attack types for detection."""
+    SQL_INJECTION = "sql_injection"
+    DDOS_ATTACK = "ddos_attack"
+    XSS_ATTACK = "xss_attack"
 
 
 class Severity(Enum):
@@ -26,64 +24,73 @@ class Severity(Enum):
 
 
 # DETERMINISTIC MAPPING: Each endpoint gets exactly ONE anomaly type
-# Includes both live and simulation endpoints
+# SIMULATION MODE FOCUSED ON SECURITY ATTACKS: SQL Injection, DDoS, XSS
 ENDPOINT_ANOMALY_MAP = {
-    '/login': AnomalyType.ERROR_SPIKE,
-    '/payment': AnomalyType.LATENCY_SPIKE,
-    '/search': AnomalyType.TRAFFIC_BURST,
-    '/profile': AnomalyType.TIMEOUT,
-    '/signup': AnomalyType.RESOURCE_EXHAUSTION,
-    '/logout': AnomalyType.ERROR_SPIKE,
-    # Simulation endpoints (same mapping)
-    '/sim/login': AnomalyType.ERROR_SPIKE,
-    '/sim/payment': AnomalyType.LATENCY_SPIKE,
-    '/sim/search': AnomalyType.TRAFFIC_BURST,
-    '/sim/profile': AnomalyType.TIMEOUT,
-    '/sim/signup': AnomalyType.RESOURCE_EXHAUSTION,
+    # Live endpoints (kept for compatibility)
+    '/login': AnomalyType.SQL_INJECTION,
+    '/payment': AnomalyType.SQL_INJECTION,
+    '/search': AnomalyType.DDOS_ATTACK,
+    '/profile': AnomalyType.XSS_ATTACK,
+    '/signup': AnomalyType.SQL_INJECTION,
+    '/logout': AnomalyType.XSS_ATTACK,
+    '/api/users': AnomalyType.DDOS_ATTACK,
+    '/api/data': AnomalyType.XSS_ATTACK,
+    '/api/posts': AnomalyType.SQL_INJECTION,
+    '/api/comments': AnomalyType.XSS_ATTACK,
+    # Simulation endpoints - PRIMARY SECURITY ATTACKS ONLY
+    '/sim/login': AnomalyType.SQL_INJECTION,
+    '/sim/payment': AnomalyType.SQL_INJECTION,
+    '/sim/search': AnomalyType.DDOS_ATTACK,
+    '/sim/profile': AnomalyType.XSS_ATTACK,
+    '/sim/signup': AnomalyType.SQL_INJECTION,
+    '/sim/logout': AnomalyType.XSS_ATTACK,
+    '/sim/api/users': AnomalyType.DDOS_ATTACK,
+    '/sim/api/data': AnomalyType.XSS_ATTACK,
+    '/sim/api/posts': AnomalyType.SQL_INJECTION,
+    '/sim/api/comments': AnomalyType.XSS_ATTACK,
 }
 
 
-# Anomaly injection parameters per type
+# Anomaly injection parameters per type - SECURITY ATTACKS ONLY
 ANOMALY_CONFIGS = {
-    AnomalyType.LATENCY_SPIKE: {
-        'response_time_multiplier': 5.0,  # 5x normal response time
-        'duration_seconds': 120,
-        'severity': Severity.HIGH,
-        'impact_score': 0.75,
-        'failure_probability': 0.15,
-        'description': 'Response times are 5x higher than baseline'
-    },
-    AnomalyType.ERROR_SPIKE: {
-        'error_rate_threshold': 0.40,  # 40% error rate
-        'duration_seconds': 90,
-        'severity': Severity.CRITICAL,
-        'impact_score': 0.90,
-        'failure_probability': 0.60,
-        'description': 'Error rate exceeds 40% - immediate action required'
-    },
-    AnomalyType.TIMEOUT: {
-        'timeout_threshold_ms': 5000,  # 5 second timeout
-        'duration_seconds': 150,
-        'severity': Severity.HIGH,
-        'impact_score': 0.80,
-        'failure_probability': 0.50,
-        'description': 'Requests timing out after 5+ seconds'
-    },
-    AnomalyType.TRAFFIC_BURST: {
-        'request_multiplier': 10.0,  # 10x normal traffic
-        'duration_seconds': 60,
-        'severity': Severity.MEDIUM,
-        'impact_score': 0.60,
-        'failure_probability': 0.25,
-        'description': 'Traffic volume is 10x above normal baseline'
-    },
-    AnomalyType.RESOURCE_EXHAUSTION: {
-        'payload_multiplier': 8.0,  # 8x normal payload
-        'duration_seconds': 180,
+    AnomalyType.SQL_INJECTION: {
+        'malicious_payload_probability': 0.85,  # 85% chance of SQL injection in request
+        'duration_seconds': 100,
         'severity': Severity.CRITICAL,
         'impact_score': 0.95,
-        'failure_probability': 0.70,
-        'description': 'Memory/bandwidth exhaustion from oversized requests'
+        'failure_probability': 0.80,
+        'description': 'SQL injection attack detected - database compromise attempt',
+        'sql_patterns': [
+            "' OR '1'='1",
+            "'; DROP TABLE users--",
+            "' UNION SELECT NULL--",
+            "admin'--",
+            "1' AND '1'='1"
+        ]
+    },
+    AnomalyType.DDOS_ATTACK: {
+        'request_multiplier': 50.0,  # 50x normal traffic (DDoS scale)
+        'duration_seconds': 120,
+        'severity': Severity.CRITICAL,
+        'impact_score': 0.98,
+        'failure_probability': 0.90,
+        'description': 'Distributed Denial of Service attack - service availability at risk',
+        'concurrent_connections': 1000
+    },
+    AnomalyType.XSS_ATTACK: {
+        'malicious_payload_probability': 0.75,  # 75% chance of XSS in request
+        'duration_seconds': 90,
+        'severity': Severity.HIGH,
+        'impact_score': 0.85,
+        'failure_probability': 0.65,
+        'description': 'Cross-Site Scripting attack detected - client-side injection attempt',
+        'xss_patterns': [
+            '<script>alert("XSS")</script>',
+            '<img src=x onerror=alert("XSS")>',
+            'javascript:alert("XSS")',
+            '<iframe src="malicious.com">',
+            '<body onload=alert("XSS")>'
+        ]
     }
 }
 
@@ -184,24 +191,37 @@ def inject_anomaly_into_log(endpoint: str, base_log: Dict) -> Dict:
     
     modified_log = base_log.copy()
     
-    # Apply anomaly-specific modifications
-    if anomaly_type == AnomalyType.LATENCY_SPIKE:
-        modified_log['response_time_ms'] *= config['response_time_multiplier']
+    # Apply anomaly-specific modifications - SECURITY ATTACKS ONLY
+    if anomaly_type == AnomalyType.SQL_INJECTION:
+        # Inject SQL injection patterns
+        if random.random() < config['malicious_payload_probability']:
+            sql_pattern = random.choice(config['sql_patterns'])
+            modified_log['query_params'] = modified_log.get('query_params', '') + sql_pattern
+            modified_log['payload'] = modified_log.get('payload', '') + sql_pattern
+            modified_log['malicious_pattern'] = 'SQL_INJECTION'
+            # May cause errors (50% chance)
+            if random.random() < 0.5:
+                modified_log['status_code'] = random.choice([400, 500, 403])
     
-    elif anomaly_type == AnomalyType.ERROR_SPIKE:
-        # Force errors
-        modified_log['status_code'] = random.choice([500, 503, 504, 429])
+    elif anomaly_type == AnomalyType.DDOS_ATTACK:
+        # Mark DDoS characteristics
+        modified_log['request_count'] = int(modified_log.get('request_count', 1) * config['request_multiplier'])
+        modified_log['concurrent_connections'] = config['concurrent_connections']
+        # Service degradation
+        modified_log['response_time_ms'] *= 3.0  # 3x slower due to overload
+        if random.random() < 0.3:  # 30% of requests fail
+            modified_log['status_code'] = random.choice([503, 504, 429])
     
-    elif anomaly_type == AnomalyType.TIMEOUT:
-        modified_log['response_time_ms'] = config['timeout_threshold_ms'] + random.uniform(100, 1000)
-    
-    elif anomaly_type == AnomalyType.TRAFFIC_BURST:
-        # Traffic burst handled at request generation level
-        # Just mark the log
-        pass
-    
-    elif anomaly_type == AnomalyType.RESOURCE_EXHAUSTION:
-        modified_log['payload_size'] = int(modified_log.get('payload_size', 1000) * config['payload_multiplier'])
+    elif anomaly_type == AnomalyType.XSS_ATTACK:
+        # Inject XSS attack patterns
+        if random.random() < config['malicious_payload_probability']:
+            xss_pattern = random.choice(config['xss_patterns'])
+            modified_log['query_params'] = modified_log.get('query_params', '') + xss_pattern
+            modified_log['payload'] = modified_log.get('payload', '') + xss_pattern
+            modified_log['malicious_pattern'] = 'XSS_ATTACK'
+            # Usually gets through (200) but might be blocked
+            if random.random() < 0.2:
+                modified_log['status_code'] = 403
     
     # Add anomaly metadata
     modified_log['_injected_anomaly'] = {

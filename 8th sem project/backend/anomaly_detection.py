@@ -7,102 +7,62 @@ from anomaly_injection import AnomalyType, Severity
 
 
 class AnomalyDetector:
-    """Deterministic anomaly detection based on metric thresholds."""
-    
-    # Baseline thresholds for normal behavior
-    BASELINES = {
-        'normal_response_time_ms': 200,
-        'normal_error_rate': 0.05,
-        'normal_req_per_minute': 10,
-        'normal_payload_size': 1500,
-    }
-    
-    # Detection thresholds (multipliers of baseline)
-    THRESHOLDS = {
-        'latency_spike_multiplier': 3.0,      # 3x normal response time
-        'error_spike_threshold': 0.25,         # 25% error rate
-        'timeout_threshold_ms': 4000,          # 4 seconds
-        'traffic_burst_multiplier': 5.0,       # 5x normal traffic
-        'resource_exhaustion_multiplier': 5.0  # 5x normal payload
-    }
+    """Security-focused anomaly detection for SQL Injection, DDoS, and XSS attacks."""
     
     def detect(self, features: Dict) -> Dict:
         """
-        Detect anomalies using deterministic logic.
+        Detect SECURITY ATTACKS ONLY using deterministic logic.
         Returns detection result with anomaly details.
         """
         endpoint = features.get('endpoint', 'unknown')
         
         # Calculate detection metrics
-        avg_response = features.get('avg_response_time', 0)
-        error_rate = features.get('error_rate', 0)
         req_count = features.get('req_count', 0)
-        payload_mean = features.get('payload_mean', 0)
         
-        # Detect each anomaly type
+        # Detect security attacks only
         detections = []
         
-        # 1. Latency Spike Detection
-        if avg_response > self.BASELINES['normal_response_time_ms'] * self.THRESHOLDS['latency_spike_multiplier']:
-            # Normalize confidence: higher excess = higher confidence (0.5-1.0 range)
-            ratio = avg_response / (self.BASELINES['normal_response_time_ms'] * self.THRESHOLDS['latency_spike_multiplier'])
-            confidence = min(1.0, 0.5 + (ratio - 1.0) * 0.3)  # Scaled confidence
+        # 1. SQL Injection Detection
+        # Check for SQL patterns in query parameters or malicious pattern flag
+        has_sql_pattern = features.get('malicious_pattern') == 'SQL_INJECTION'
+        sql_keywords = features.get('sql_keywords_count', 0)
+        if has_sql_pattern or sql_keywords > 3:
+            confidence = 0.95 if has_sql_pattern else min(0.85, 0.5 + sql_keywords * 0.1)
             detections.append({
-                'anomaly_type': AnomalyType.LATENCY_SPIKE.value,
-                'severity': Severity.HIGH.name,
-                'confidence': confidence,
-                'metric_value': avg_response,
-                'threshold': self.BASELINES['normal_response_time_ms'] * self.THRESHOLDS['latency_spike_multiplier']
-            })
-        
-        # 2. Error Spike Detection
-        if error_rate > self.THRESHOLDS['error_spike_threshold']:
-            severity = Severity.CRITICAL if error_rate > 0.40 else Severity.HIGH
-            ratio = error_rate / self.THRESHOLDS['error_spike_threshold']
-            confidence = min(1.0, 0.6 + (ratio - 1.0) * 0.25)  # Scaled confidence
-            detections.append({
-                'anomaly_type': AnomalyType.ERROR_SPIKE.value,
-                'severity': severity.name,
-                'confidence': confidence,
-                'metric_value': error_rate,
-                'threshold': self.THRESHOLDS['error_spike_threshold']
-            })
-        
-        # 3. Timeout Detection
-        max_response = features.get('max_response_time', 0)
-        if max_response > self.THRESHOLDS['timeout_threshold_ms']:
-            ratio = max_response / self.THRESHOLDS['timeout_threshold_ms']
-            confidence = min(1.0, 0.55 + (ratio - 1.0) * 0.28)  # Scaled confidence
-            detections.append({
-                'anomaly_type': AnomalyType.TIMEOUT.value,
-                'severity': Severity.HIGH.name,
-                'confidence': confidence,
-                'metric_value': max_response,
-                'threshold': self.THRESHOLDS['timeout_threshold_ms']
-            })
-        
-        # 4. Traffic Burst Detection
-        if req_count > self.BASELINES['normal_req_per_minute'] * self.THRESHOLDS['traffic_burst_multiplier']:
-            ratio = req_count / (self.BASELINES['normal_req_per_minute'] * self.THRESHOLDS['traffic_burst_multiplier'])
-            confidence = min(1.0, 0.45 + (ratio - 1.0) * 0.2)  # Lower confidence for traffic burst
-            detections.append({
-                'anomaly_type': AnomalyType.TRAFFIC_BURST.value,
-                'severity': Severity.MEDIUM.name,
-                'confidence': confidence,
-                'metric_value': req_count,
-                'threshold': self.BASELINES['normal_req_per_minute'] * self.THRESHOLDS['traffic_burst_multiplier']
-            })
-        
-        # 5. Resource Exhaustion Detection
-        if payload_mean > self.BASELINES['normal_payload_size'] * self.THRESHOLDS['resource_exhaustion_multiplier']:
-            ratio = payload_mean / (self.BASELINES['normal_payload_size'] * self.THRESHOLDS['resource_exhaustion_multiplier'])
-            confidence = min(1.0, 0.65 + (ratio - 1.0) * 0.25)  # Higher confidence for resource issues
-            detections.append({
-                'anomaly_type': AnomalyType.RESOURCE_EXHAUSTION.value,
+                'anomaly_type': AnomalyType.SQL_INJECTION.value,
                 'severity': Severity.CRITICAL.name,
                 'confidence': confidence,
-                'metric_value': payload_mean,
-                'threshold': self.BASELINES['normal_payload_size'] * self.THRESHOLDS['resource_exhaustion_multiplier']
+                'metric_value': sql_keywords,
+                'threshold': 3
+            })
+        
+        # 2. DDoS Attack Detection
+        # Very high traffic from multiple IPs with sustained pattern
+        request_rate = features.get('request_count', req_count)
+        unique_ips = features.get('unique_ips', 1)
+        if request_rate > 200 or (req_count > 100 and unique_ips > 50):
+            ratio = request_rate / 200
+            confidence = min(0.95, 0.65 + (ratio - 1.0) * 0.2)
+            detections.append({
+                'anomaly_type': AnomalyType.DDOS_ATTACK.value,
+                'severity': Severity.CRITICAL.name,
+                'confidence': confidence,
+                'metric_value': request_rate,
+                'threshold': 200
+            })
+        
+        # 3. XSS Attack Detection
+        # Check for XSS patterns in query parameters or malicious pattern flag
+        has_xss_pattern = features.get('malicious_pattern') == 'XSS_ATTACK'
+        xss_keywords = features.get('xss_keywords_count', 0)
+        if has_xss_pattern or xss_keywords > 2:
+            confidence = 0.90 if has_xss_pattern else min(0.80, 0.5 + xss_keywords * 0.15)
+            detections.append({
+                'anomaly_type': AnomalyType.XSS_ATTACK.value,
+                'severity': Severity.HIGH.name,
+                'confidence': confidence,
+                'metric_value': xss_keywords,
+                'threshold': 2
             })
         
         # If multiple anomalies detected, pick the most severe

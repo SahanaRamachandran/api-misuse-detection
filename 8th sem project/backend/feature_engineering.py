@@ -63,7 +63,10 @@ def extract_features_from_logs(time_window_minutes=1, is_simulation=False, speci
             'status_code': log.status_code,
             'payload_size': log.payload_size,
             'ip_address': log.ip_address,
-            'user_id': log.user_id
+            'user_id': log.user_id,
+            'malicious_pattern': getattr(log, 'malicious_pattern', None),
+            'query_params': getattr(log, 'query_params', ''),
+            'request_count': getattr(log, 'request_count', 1)
         } for log in logs])
         
         req_count = len(df)
@@ -89,6 +92,27 @@ def extract_features_from_logs(time_window_minutes=1, is_simulation=False, speci
         most_common_endpoint = df['endpoint'].mode()[0] if len(df) > 0 else "/unknown"
         most_common_method = df['method'].mode()[0] if len(df) > 0 else "GET"
         
+        # Check for malicious patterns
+        malicious_pattern = None
+        if 'malicious_pattern' in df.columns:
+            pattern_counts = df['malicious_pattern'].dropna()
+            if len(pattern_counts) > 0:
+                malicious_pattern = pattern_counts.mode()[0] if len(pattern_counts) > 0 else None
+        
+        # Count SQL injection indicators
+        sql_keywords = 0
+        xss_keywords = 0
+        if 'query_params' in df.columns:
+            query_str = ' '.join(df['query_params'].fillna('').astype(str))
+            sql_patterns = ["'", "OR", "AND", "SELECT", "DROP", "UNION", "--", "admin"]
+            xss_patterns = ["<script>", "<img", "javascript:", "<iframe", "onerror=", "onload="]
+            sql_keywords = sum(1 for pattern in sql_patterns if pattern.lower() in query_str.lower())
+            xss_keywords = sum(1 for pattern in xss_patterns if pattern.lower() in query_str.lower())
+        
+        # Calculate request rate for DDoS detection
+        request_count = df['request_count'].sum() if 'request_count' in df.columns else req_count
+        unique_ips = df['ip_address'].nunique()
+        
         features = {
             'req_count': req_count,
             'error_rate': error_rate,
@@ -100,7 +124,12 @@ def extract_features_from_logs(time_window_minutes=1, is_simulation=False, speci
             'status_entropy': status_entropy,
             'endpoint': most_common_endpoint,
             'method': most_common_method,
-            'ip_addresses': df['ip_address'].unique().tolist()  # All unique IPs in this window
+            'ip_addresses': df['ip_address'].unique().tolist(),  # All unique IPs in this window
+            'malicious_pattern': malicious_pattern,
+            'sql_keywords_count': sql_keywords,
+            'xss_keywords_count': xss_keywords,
+            'request_count': request_count,
+            'unique_ips': unique_ips
         }
         
         return features

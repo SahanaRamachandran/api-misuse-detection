@@ -69,7 +69,7 @@ export const RiskScoreTimeline: React.FC<GraphsProps> = ({ hours = 24 }) => {
   if (!data || data.length === 0) {
     return (
       <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-4">Risk Score Timeline</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Risk Score Timeline</h3>
         <div className="flex items-center justify-center h-64 text-gray-500">
           <p>No anomaly data available. Start a simulation to see results.</p>
         </div>
@@ -79,7 +79,7 @@ export const RiskScoreTimeline: React.FC<GraphsProps> = ({ hours = 24 }) => {
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
-      <h3 className="text-lg font-semibold mb-4">Risk Score Timeline</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Risk Score Timeline</h3>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
@@ -134,7 +134,7 @@ export const AnomaliesByEndpoint: React.FC<GraphsProps> = ({ hours = 24 }) => {
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
-      <h3 className="text-lg font-semibold mb-4">Anomalies by Endpoint</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Anomalies by Endpoint</h3>
       <ResponsiveContainer width="100%" height={300}>
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
@@ -191,7 +191,7 @@ export const AnomalyTypeDistribution: React.FC<GraphsProps> = ({ hours = 24 }) =
   if (!data || data.length === 0) {
     return (
       <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-4">Anomaly Type Distribution</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Anomaly Type Distribution</h3>
         <div className="flex items-center justify-center h-64 text-gray-500">
           <p>No anomaly data available. Start a simulation to see results.</p>
         </div>
@@ -201,7 +201,7 @@ export const AnomalyTypeDistribution: React.FC<GraphsProps> = ({ hours = 24 }) =
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
-      <h3 className="text-lg font-semibold mb-4">Anomaly Type Distribution</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Anomaly Type Distribution</h3>
       <ResponsiveContainer width="100%" height={300}>
         <PieChart>
           <Pie
@@ -250,7 +250,7 @@ export const SeverityDistribution: React.FC<GraphsProps> = ({ hours = 24 }) => {
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
-      <h3 className="text-lg font-semibold mb-4">Severity Distribution</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Severity Distribution</h3>
       <ResponsiveContainer width="100%" height={300}>
         <PieChart>
           <Pie
@@ -299,7 +299,7 @@ export const TopAffectedEndpoints: React.FC<GraphsProps> = ({ hours = 24, limit 
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
-      <h3 className="text-lg font-semibold mb-4">Top Affected Endpoints</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Affected Endpoints</h3>
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -359,7 +359,7 @@ export const ResolutionSuggestions: React.FC<GraphsProps> = ({ hours = 24 }) => 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold">Resolution Suggestions</h3>
+        <h3 className="text-lg font-semibold text-gray-900">Resolution Suggestions</h3>
         <div className="flex gap-2">
           {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map((severity) => (
             <button
@@ -400,8 +400,25 @@ export const ResolutionSuggestions: React.FC<GraphsProps> = ({ hours = 24 }) => 
                       {suggestion.category}
                     </span>
                   </div>
-                  <h4 className="font-semibold text-gray-900 mb-1">{suggestion.action}</h4>
-                  <p className="text-sm text-gray-700 mb-2">{suggestion.detail}</p>
+                  <h4 className="font-semibold text-gray-900 mb-2">{suggestion.action}</h4>
+                  
+                  {suggestion.description && (
+                    <div className="mb-3">
+                      <p className="text-sm text-gray-700 mb-2">{suggestion.description}</p>
+                    </div>
+                  )}
+                  
+                  {suggestion.steps && suggestion.steps.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-xs font-semibold text-gray-600 mb-1">Implementation Steps:</p>
+                      <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 ml-2">
+                        {suggestion.steps.map((step: string, stepIndex: number) => (
+                          <li key={stepIndex} className="leading-relaxed">{step}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
                   <div className="flex gap-3 text-xs text-gray-500">
                     <span>Endpoint: {suggestion.endpoint}</span>
                     <span>Type: {suggestion.anomaly_type}</span>

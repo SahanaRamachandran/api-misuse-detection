@@ -1,6 +1,10 @@
 @echo off
-cd /d "C:\Users\HP\Desktop\8th sem project\frontend"
-echo Starting Frontend on http://localhost:3000...
+cd /d "%~dp0frontend"
+echo ===============================================
+echo    STARTING FRONTEND - Anomaly Dashboard
+echo ===============================================
+echo.
+echo Frontend will be available at: http://localhost:5173
 echo.
 npm run dev
 pause

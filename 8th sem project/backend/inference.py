@@ -188,4 +188,5 @@ class MLInferenceEngine:
             return "LOW"
 
 
-inference_engine = MLInferenceEngine()
+# Initialize inference engine (will be set in app.py after database initialization)
+inference_engine = None
