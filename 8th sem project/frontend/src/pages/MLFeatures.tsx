@@ -578,7 +578,7 @@ const MLFeatures: React.FC = () => {
                   <div>
                     <span className="font-mono text-sm text-info-400">{pred.endpoint}</span>
                     <div className="text-xs text-dark-muted mt-1">
-                      {new Date(pred.timestamp).toLocaleString()} • {pred.anomaly_type} • {pred.severity}
+                      {new Date(new Date(pred.timestamp).getTime() + (5*60+30)*60000).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST • {pred.anomaly_type} • {pred.severity}
                     </div>
                   </div>
                   <div className="text-right">

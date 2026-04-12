@@ -141,6 +141,101 @@ class ResolutionEngine:
                 {'category': 'OPTIMIZATION', 'action': 'Use pagination', 'detail': 'Limit response size to 100 items per page', 'priority': 'LOW'},
             ],
         },
+        
+        'brute_force': {
+            'CRITICAL': [
+                {'category': 'IMMEDIATE', 'action': 'Lock targeted accounts', 'detail': 'Enforce 30-minute lockout after 5 failed login attempts', 'priority': 'CRITICAL'},
+                {'category': 'IMMEDIATE', 'action': 'Enable MFA enforcement', 'detail': 'Force TOTP/WebAuthn MFA for all affected accounts immediately', 'priority': 'CRITICAL'},
+                {'category': 'SECURITY', 'action': 'Block attacker IPs', 'detail': 'Add attacker source IPs to firewall deny list', 'priority': 'CRITICAL'},
+                {'category': 'SECURITY', 'action': 'Deploy CAPTCHA', 'detail': 'Require reCAPTCHA v3 after 3 consecutive login failures', 'priority': 'HIGH'},
+                {'category': 'MONITORING', 'action': 'Alert on credential stuffing', 'detail': 'Alert when > 20 failed logins in 5 minutes from same IP', 'priority': 'HIGH'},
+            ],
+            'HIGH': [
+                {'category': 'THROTTLING', 'action': 'Rate limit auth endpoints', 'detail': 'Allow max 10 login attempts per 15 min per IP per account', 'priority': 'HIGH'},
+                {'category': 'SECURITY', 'action': 'Implement exponential backoff', 'detail': 'Delay responses: delay = min(2^failures, 300) seconds', 'priority': 'HIGH'},
+                {'category': 'MONITORING', 'action': 'Log failed attempts', 'detail': 'Log all failed logins with IP, user-agent, and timestamp', 'priority': 'MEDIUM'},
+                {'category': 'SECURITY', 'action': 'check pwned passwords', 'detail': 'Reject passwords found in HaveIBeenPwned database', 'priority': 'MEDIUM'},
+            ],
+            'MEDIUM': [
+                {'category': 'POLICY', 'action': 'Enforce password complexity', 'detail': 'Minimum 14 characters with upper, lower, digit, and symbol', 'priority': 'MEDIUM'},
+                {'category': 'MONITORING', 'action': 'Geo-velocity check', 'detail': 'Flag logins from 2 different countries within 1 hour', 'priority': 'LOW'},
+            ],
+        },
+        
+        'unauthorized_access': {
+            'CRITICAL': [
+                {'category': 'IMMEDIATE', 'action': 'Revoke compromised tokens', 'detail': 'Invalidate all active sessions and JWT tokens for affected users', 'priority': 'CRITICAL'},
+                {'category': 'SECURITY', 'action': 'Audit access control lists', 'detail': 'Review RBAC policies and remove excessive permissions', 'priority': 'CRITICAL'},
+                {'category': 'SECURITY', 'action': 'Enable object-level authorization', 'detail': 'Add ownership checks on all resource endpoints (IDOR prevention)', 'priority': 'CRITICAL'},
+                {'category': 'MONITORING', 'action': 'Enable privilege audit logging', 'detail': 'Log all authorization failures with user ID and resource path', 'priority': 'HIGH'},
+            ],
+            'HIGH': [
+                {'category': 'SECURITY', 'action': 'Implement RBAC', 'detail': 'Deploy role-based access control with principle of least privilege', 'priority': 'HIGH'},
+                {'category': 'SECURITY', 'action': 'Short-lived tokens', 'detail': 'Set JWT access_token=900s, refresh_token=86400s with rotation', 'priority': 'HIGH'},
+                {'category': 'MONITORING', 'action': 'Detect IDOR patterns', 'detail': 'Alert when a user accesses > 5 different user IDs in 1 minute', 'priority': 'MEDIUM'},
+            ],
+            'MEDIUM': [
+                {'category': 'SECURITY', 'action': 'Replace sequential IDs', 'detail': 'Use UUID v4 for all resource identifiers to prevent enumeration', 'priority': 'MEDIUM'},
+                {'category': 'MONITORING', 'action': 'Run automated IDOR scan', 'detail': 'Use Autorize Burp plugin in staging to find IDOR vulnerabilities', 'priority': 'LOW'},
+            ],
+        },
+        
+        'sql_injection': {
+            'CRITICAL': [
+                {'category': 'IMMEDIATE', 'action': 'Switch to prepared statements', 'detail': 'Replace all raw SQL with parameterized queries immediately', 'priority': 'CRITICAL'},
+                {'category': 'IMMEDIATE', 'action': 'Deploy database firewall', 'detail': 'GreenSQL / AWS RDS Proxy to intercept malicious queries in real time', 'priority': 'CRITICAL'},
+                {'category': 'SECURITY', 'action': 'Revoke excess DB privileges', 'detail': 'REVOKE ALL; GRANT EXECUTE only on required stored procedures', 'priority': 'CRITICAL'},
+                {'category': 'SECURITY', 'action': 'Enable WAF SQLi rules', 'detail': 'Activate OWASP CRS 942xxx SQL injection rules in ModSecurity', 'priority': 'HIGH'},
+                {'category': 'MONITORING', 'action': 'Log suspicious query patterns', 'detail': 'Alert on UNION, OR 1=1, SLEEP(), BENCHMARK() in query logs', 'priority': 'HIGH'},
+            ],
+            'HIGH': [
+                {'category': 'SECURITY', 'action': 'Migrate to ORM', 'detail': 'Replace dynamic queries with SQLAlchemy/Django ORM with auto-escaping', 'priority': 'HIGH'},
+                {'category': 'VALIDATION', 'action': 'Add input validation schemas', 'detail': 'Use Pydantic/Marshmallow with strict type and regex validation', 'priority': 'HIGH'},
+                {'category': 'MONITORING', 'action': 'SAST scan for SQLi', 'detail': 'Run bandit -r . --tests B608 in CI/CD to catch injection patterns', 'priority': 'MEDIUM'},
+            ],
+            'MEDIUM': [
+                {'category': 'SECURITY', 'action': 'Harden error messages', 'detail': 'Return generic 500 errors; log full DB errors server-side only', 'priority': 'MEDIUM'},
+                {'category': 'TESTING', 'action': 'Run sqlmap audit', 'detail': 'Execute sqlmap against staging environment to find remaining vectors', 'priority': 'LOW'},
+            ],
+        },
+        
+        'xss_attack': {
+            'CRITICAL': [
+                {'category': 'IMMEDIATE', 'action': 'Deploy strict CSP', 'detail': "Content-Security-Policy: default-src 'self'; script-src 'strict-dynamic'", 'priority': 'CRITICAL'},
+                {'category': 'IMMEDIATE', 'action': 'Sanitize stored content', 'detail': 'Run DOMPurify / bleach on all user-generated content before storage and render', 'priority': 'CRITICAL'},
+                {'category': 'SECURITY', 'action': 'Enable HTTPOnly cookies', 'detail': 'Add HttpOnly; Secure; SameSite=Strict to all session cookies', 'priority': 'CRITICAL'},
+                {'category': 'SECURITY', 'action': 'Deploy WAF XSS rules', 'detail': 'Activate OWASP CRS 941xxx XSS detection rules in ModSecurity', 'priority': 'HIGH'},
+                {'category': 'SECURITY', 'action': 'Implement Trusted Types', 'detail': "require-trusted-types-for 'script' in CSP to block DOM-based XSS", 'priority': 'HIGH'},
+            ],
+            'HIGH': [
+                {'category': 'SECURITY', 'action': 'Context-aware output encoding', 'detail': 'Apply HTML entity / JS / URL encoding based on injection context', 'priority': 'HIGH'},
+                {'category': 'SECURITY', 'action': 'Add SRI to external scripts', 'detail': 'Add integrity hashes to all <script> and <link> tags', 'priority': 'HIGH'},
+                {'category': 'MONITORING', 'action': 'SAST scan for XSS', 'detail': 'Add Semgrep XSS rules to CI/CD to catch unsafe innerHTML assignments', 'priority': 'MEDIUM'},
+            ],
+            'MEDIUM': [
+                {'category': 'SECURITY', 'action': 'Set X-Content-Type-Options', 'detail': 'X-Content-Type-Options: nosniff to prevent MIME-type confusion', 'priority': 'MEDIUM'},
+                {'category': 'POLICY', 'action': 'Developer XSS training', 'detail': 'Mandatory OWASP XSS Prevention cheat-sheet review in code onboarding', 'priority': 'LOW'},
+            ],
+        },
+        
+        'ddos_attack': {
+            'CRITICAL': [
+                {'category': 'IMMEDIATE', 'action': 'Enable DDoS mitigation service', 'detail': 'Activate Cloudflare Under Attack Mode or AWS Shield Advanced', 'priority': 'CRITICAL'},
+                {'category': 'IMMEDIATE', 'action': 'Implement SYN cookie protection', 'detail': 'echo 1 > /proc/sys/net/ipv4/tcp_syncookies on all nodes', 'priority': 'CRITICAL'},
+                {'category': 'SECURITY', 'action': 'Block attack source IPs', 'detail': 'BGP blackhole routing for attack IPs via ISP coordination', 'priority': 'CRITICAL'},
+                {'category': 'SCALING', 'action': 'Auto-scale infrastructure', 'detail': 'Scale from 2 to 8 instances; use Kubernetes HPA at 70% CPU', 'priority': 'HIGH'},
+                {'category': 'THROTTLING', 'action': 'Enable NGINX rate limiting', 'detail': 'limit_req_zone zone=one:10m rate=10r/s; burst=20 nodelay', 'priority': 'HIGH'},
+            ],
+            'HIGH': [
+                {'category': 'SECURITY', 'action': 'Geo-block high-risk regions', 'detail': 'Block top attack-source countries using Cloudflare IP Lists', 'priority': 'HIGH'},
+                {'category': 'THROTTLING', 'action': 'Deploy adaptive rate limiting', 'detail': 'Token bucket algorithm: auto-block IPs exceeding 3σ above baseline', 'priority': 'HIGH'},
+                {'category': 'MONITORING', 'action': 'Enable traffic scrubbing alerts', 'detail': 'Alert when traffic exceeds 150% of 7-day rolling average', 'priority': 'MEDIUM'},
+            ],
+            'MEDIUM': [
+                {'category': 'INFRASTRUCTURE', 'action': 'Use CDN for static assets', 'detail': 'Offload 80% of traffic to edge servers to reduce origin load', 'priority': 'MEDIUM'},
+                {'category': 'OPTIMIZATION', 'action': 'Tune connection timeouts', 'detail': 'Set client_body_timeout 10s; keepalive_timeout 15s in nginx', 'priority': 'LOW'},
+            ],
+        },
     }
     
     def generate_resolutions(self, anomaly_type: str, severity: str, endpoint: str = None, ip_address: str = None, context: Dict = None) -> List[Dict]:

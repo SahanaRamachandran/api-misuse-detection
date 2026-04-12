@@ -114,7 +114,7 @@ const AnomalyTable: React.FC<AnomalyTableProps> = ({ anomalies, title = 'Recent 
                   </div>
                   <div className="text-right">
                     <div className="text-sm text-dark-muted">
-                      {new Date(anomaly.timestamp).toLocaleString()}
+                      {new Date(new Date(anomaly.timestamp).getTime() + (5*60+30)*60000).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
                     </div>
                     <div className="text-lg font-bold text-white">
                       Risk: {anomaly.risk_score.toFixed(3)}

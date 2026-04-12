@@ -65,6 +65,34 @@ class AnomalyDetector:
                 'threshold': 2
             })
         
+        # 4. Brute Force Detection
+        # High repeated requests from same IP to auth endpoints with high failure rate
+        failed_logins = features.get('failed_logins_count', 0)
+        has_brute_pattern = features.get('malicious_pattern') == 'BRUTE_FORCE'
+        if has_brute_pattern or failed_logins >= 5:
+            confidence = 0.93 if has_brute_pattern else min(0.88, 0.55 + failed_logins * 0.07)
+            detections.append({
+                'anomaly_type': AnomalyType.BRUTE_FORCE.value,
+                'severity': Severity.CRITICAL.name,
+                'confidence': confidence,
+                'metric_value': failed_logins,
+                'threshold': 5
+            })
+        
+        # 5. Unauthorized Access Detection
+        # Requests with invalid tokens, forbidden paths, or suspicious auth headers
+        auth_failures = features.get('auth_failure_count', 0)
+        has_unauth_pattern = features.get('malicious_pattern') == 'UNAUTHORIZED_ACCESS'
+        if has_unauth_pattern or auth_failures >= 3:
+            confidence = 0.87 if has_unauth_pattern else min(0.82, 0.50 + auth_failures * 0.12)
+            detections.append({
+                'anomaly_type': AnomalyType.UNAUTHORIZED_ACCESS.value,
+                'severity': Severity.HIGH.name,
+                'confidence': confidence,
+                'metric_value': auth_failures,
+                'threshold': 3
+            })
+        
         # If multiple anomalies detected, pick the most severe
         if detections:
             # Sort by severity rank

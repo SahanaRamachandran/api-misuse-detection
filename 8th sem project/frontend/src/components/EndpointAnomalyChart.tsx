@@ -162,7 +162,7 @@ const EndpointAnomalyChart: React.FC<EndpointAnomalyChartProps> = ({ detectionMo
               dataKey="timestamp" 
               stroke="#9ca3af" 
               style={{ fontSize: '10px' }}
-              tickFormatter={(value) => new Date(value).toLocaleTimeString()}
+              tickFormatter={(value) => new Date(new Date(value).getTime() + (5*60+30)*60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
             />
             <YAxis stroke="#9ca3af" style={{ fontSize: '12px' }} domain={[0, 1]} />
             <Tooltip 
@@ -172,7 +172,7 @@ const EndpointAnomalyChart: React.FC<EndpointAnomalyChartProps> = ({ detectionMo
                 borderRadius: '8px',
                 color: '#fff'
               }}
-              labelFormatter={(value) => new Date(value).toLocaleString()}
+              labelFormatter={(value) => new Date(new Date(value).getTime() + (5*60+30)*60000).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST'}
               formatter={(value: any, name: string, props: any) => {
                 if (name === 'risk_score') {
                   return [

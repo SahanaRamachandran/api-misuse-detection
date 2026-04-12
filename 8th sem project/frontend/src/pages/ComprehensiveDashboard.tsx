@@ -11,10 +11,18 @@ import {
   ResolutionSuggestions,
 } from '../components/VisualizationGraphs';
 
+const TIME_RANGES = [
+  { label: '1 Hour', hours: 1 },
+  { label: '6 Hours', hours: 6 },
+  { label: '24 Hours', hours: 24 },
+  { label: '7 Days', hours: 168 },
+];
+
 const ComprehensiveDashboard: React.FC = () => {
   const [simulationActive, setSimulationActive] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [selectedHours, setSelectedHours] = useState(24);
   const { connected } = useWebSocket();
 
   const handleStartEnhancedSimulation = async () => {
@@ -78,6 +86,22 @@ const ComprehensiveDashboard: React.FC = () => {
                   {connected ? 'Live Connected' : 'Disconnected'}
                 </span>
               </div>
+              {/* Time Range Selector */}
+              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                {TIME_RANGES.map((range) => (
+                  <button
+                    key={range.hours}
+                    onClick={() => setSelectedHours(range.hours)}
+                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                      selectedHours === range.hours
+                        ? 'bg-purple-600 text-white shadow'
+                        : 'text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {range.label}
+                  </button>
+                ))}
+              </div>
               {!simulationActive ? (
                 <button
                   onClick={handleStartEnhancedSimulation}
@@ -131,20 +155,20 @@ const ComprehensiveDashboard: React.FC = () => {
 
       {/* Main Visualizations Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <RiskScoreTimeline hours={24} />
-        <AnomaliesByEndpoint hours={24} />
-        <AnomalyTypeDistribution hours={24} />
-        <SeverityDistribution hours={24} />
+        <RiskScoreTimeline hours={selectedHours} />
+        <AnomaliesByEndpoint hours={selectedHours} />
+        <AnomalyTypeDistribution hours={selectedHours} />
+        <SeverityDistribution hours={selectedHours} />
       </div>
 
       {/* Top Affected Endpoints */}
       <div className="mb-6">
-        <TopAffectedEndpoints hours={24} />
+        <TopAffectedEndpoints hours={selectedHours} />
       </div>
 
       {/* Resolution Suggestions */}
       <div className="mb-6">
-        <ResolutionSuggestions hours={24} />
+        <ResolutionSuggestions hours={selectedHours} />
       </div>
 
       {/* Endpoint Statistics */}

@@ -107,7 +107,7 @@ const AdminPanel: React.FC = () => {
 
   const formatTimestamp = (timestamp: string) => {
     if (!timestamp) return 'N/A';
-    return new Date(timestamp).toLocaleString();
+    return new Date(new Date(timestamp).getTime() + (5*60+30)*60000).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST';
   };
 
   const runBlockingDemo = async () => {

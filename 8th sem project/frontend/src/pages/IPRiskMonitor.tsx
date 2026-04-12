@@ -259,7 +259,7 @@ const IPRiskMonitor: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-dark-muted">
-                        {new Date(profile.last_seen).toLocaleTimeString()}
+                        {new Date(new Date(profile.last_seen).getTime() + (5*60+30)*60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })} IST
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-dark-muted">
                         {profile.is_simulation ? (

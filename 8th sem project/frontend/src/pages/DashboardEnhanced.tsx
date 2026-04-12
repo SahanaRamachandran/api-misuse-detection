@@ -433,21 +433,13 @@ if (loading) {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title={detectionMode === 'live' ? 'Live Requests' : 'Simulated Requests'}
           value={modeStats.total_requests.toLocaleString()}
           subtitle={`${modeStats.current_window_count}/${modeStats.window_size} in current window`}
           color="blue"
           icon={detectionMode === 'live' ? '🎯' : '🎬'}
-        />
-        
-        <StatCard
-          title="Windows Processed"
-          value={modeStats.windows_processed.toLocaleString()}
-          subtitle="10 requests per window"
-          color="purple"
-          icon="📊"
         />
         
         <StatCard

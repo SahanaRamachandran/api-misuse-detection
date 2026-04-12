@@ -13,6 +13,8 @@ class AnomalyType(Enum):
     SQL_INJECTION = "sql_injection"
     DDOS_ATTACK = "ddos_attack"
     XSS_ATTACK = "xss_attack"
+    BRUTE_FORCE = "brute_force"
+    UNAUTHORIZED_ACCESS = "unauthorized_access"
 
 
 class Severity(Enum):
@@ -37,6 +39,11 @@ ENDPOINT_ANOMALY_MAP = {
     '/api/data': AnomalyType.XSS_ATTACK,
     '/api/posts': AnomalyType.SQL_INJECTION,
     '/api/comments': AnomalyType.XSS_ATTACK,
+    '/api/admin': AnomalyType.BRUTE_FORCE,
+    '/api/token': AnomalyType.BRUTE_FORCE,
+    '/api/reset-password': AnomalyType.BRUTE_FORCE,
+    '/api/private': AnomalyType.UNAUTHORIZED_ACCESS,
+    '/api/restricted': AnomalyType.UNAUTHORIZED_ACCESS,
     # Simulation endpoints - PRIMARY SECURITY ATTACKS ONLY
     '/sim/login': AnomalyType.SQL_INJECTION,
     '/sim/payment': AnomalyType.SQL_INJECTION,
@@ -48,6 +55,11 @@ ENDPOINT_ANOMALY_MAP = {
     '/sim/api/data': AnomalyType.XSS_ATTACK,
     '/sim/api/posts': AnomalyType.SQL_INJECTION,
     '/sim/api/comments': AnomalyType.XSS_ATTACK,
+    '/sim/api/admin': AnomalyType.BRUTE_FORCE,
+    '/sim/api/token': AnomalyType.BRUTE_FORCE,
+    '/sim/api/reset-password': AnomalyType.BRUTE_FORCE,
+    '/sim/api/private': AnomalyType.UNAUTHORIZED_ACCESS,
+    '/sim/api/restricted': AnomalyType.UNAUTHORIZED_ACCESS,
 }
 
 
@@ -90,6 +102,29 @@ ANOMALY_CONFIGS = {
             'javascript:alert("XSS")',
             '<iframe src="malicious.com">',
             '<body onload=alert("XSS")>'
+        ]
+    },
+    AnomalyType.BRUTE_FORCE: {
+        'malicious_payload_probability': 0.90,
+        'duration_seconds': 110,
+        'severity': Severity.CRITICAL,
+        'impact_score': 0.88,
+        'failure_probability': 0.75,
+        'description': 'Brute-force credential attack detected - repeated authentication attempts',
+        'failed_login_threshold': 10
+    },
+    AnomalyType.UNAUTHORIZED_ACCESS: {
+        'malicious_payload_probability': 0.80,
+        'duration_seconds': 95,
+        'severity': Severity.HIGH,
+        'impact_score': 0.82,
+        'failure_probability': 0.70,
+        'description': 'Unauthorized access attempt detected - privilege escalation or IDOR',
+        'auth_bypass_patterns': [
+            'Authorization: Bearer invalid_token',
+            'X-User-ID: 0',
+            '../../../etc/passwd',
+            'role=admin',
         ]
     }
 }

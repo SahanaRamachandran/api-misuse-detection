@@ -10,7 +10,7 @@ const Charts: React.FC<ChartsProps> = ({ anomalies }) => {
   // Risk Score Timeline - Last 50 anomalies
   const riskOverTimeData = anomalies.slice(0, 50).reverse().map((a, index) => ({
     index: index + 1,
-    time: new Date(a.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    time: new Date(new Date(a.timestamp).getTime() + (5*60+30)*60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),    // IST
     risk: parseFloat((a.risk_score * 1000).toFixed(2)), // Scale for better visibility
     failure: parseFloat((a.failure_probability * 100).toFixed(1)),
   }));
